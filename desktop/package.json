@@ -1,0 +1,45 @@
+{
+  "name": "mission-control-desktop",
+  "version": "0.2.0",
+  "description": "Mission Control — local Windows desktop app (Electron + SQLite)",
+  "main": "main.js",
+  "author": "Mission Control",
+  "scripts": {
+    "build:renderer": "cd .. && npm run build:desktop",
+    "start": "npm run build:renderer && electron .",
+    "dist": "npm run build:renderer && electron-builder --win portable"
+  },
+  "dependencies": {
+    "sql.js": "^1.10.3"
+  },
+  "devDependencies": {
+    "electron": "^31.7.6",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.missioncontrol.desktop",
+    "productName": "Mission Control",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "asarUnpack": [
+      "**/node_modules/sql.js/dist/sql-wasm.wasm"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "artifactName": "MissionControl-${version}-portable.${ext}",
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "MissionControl-${version}-portable.${ext}"
+    }
+  }
+}

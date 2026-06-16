@@ -4,3 +4,9 @@ dist
 *.local
 .vite
 .claude/settings.local.json
+
+# desktop (Electron) build artifacts
+desktop/renderer
+desktop/release
+desktop/node_modules
+*.db
