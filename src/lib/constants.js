@@ -18,6 +18,18 @@ export const ASSEMBLIES = {
 
 export const PRIORITIES = { "גבוה": "#FF7B72", "בינוני": "#E3B341", "נמוך": "#9AA5B1" };
 
+// Procurement (בקרת רכש) — carried over from the original Excel workbook.
+export const PROC_STATUSES = {
+  "להזמין": "#F85149", "הוזמן": "#E8C547", "בדרך": "#58A6FF", "הגיע": "#3FB950",
+};
+export const PROC_STATUS_ORDER = ["להזמין", "הוזמן", "בדרך", "הגיע"];
+
+export const PROC_SEED = [
+  { id: 1, item: "פרופילי אלומיניום 40x40", supplier: "אלומיט", status: "הוזמן", orderDate: "10.6.26", eta: "24.6.26", cost: "₪3,200", notes: "" },
+  { id: 2, item: "חלקים מודפסים (SLA)", supplier: "3DZone", status: "בדרך", orderDate: "12.6.26", eta: "19.6.26", cost: "₪880", notes: "עבור הרכבת מדגים." },
+  { id: 3, item: "מחברים אלקטרוניים", supplier: "RS", status: "להזמין", orderDate: "", eta: "", cost: "", notes: "ממתין לאישור BOM." },
+];
+
 // Member colors cycle through this palette when a new member is added.
 export const MEMBER_PALETTE = [
   "#E8B84B", "#58A6FF", "#3FB950", "#F778BA", "#BC8CFF",
@@ -51,6 +63,7 @@ export const STORE = {
   tasks: "mc:tasks:v2",
   members: "mc:members:v2",
   audit: "mc:auditlog:v2",
+  procurement: "mc:procurement:v2",
 };
 
 // Choose readable text color on a colored chip by luminance.

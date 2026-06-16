@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { S } from "../lib/styles.js";
-import { STATUSES, ASSEMBLIES, PRIORITIES, STATUS_ORDER, readable } from "../lib/constants.js";
+import { STATUSES, ASSEMBLIES, PRIORITIES, STATUS_ORDER, readable, initials } from "../lib/constants.js";
 import Attachments from "./Attachments.jsx";
 
 function Field({ label, children }) {
@@ -18,8 +18,52 @@ function Select({ value, options, onChange, color }) {
 
 const blankTask = () => ({
   asm: Object.keys(ASSEMBLIES)[0], task: "", pri: "בינוני",
-  status: "בעבודה", who: "", ctrl: "", due: "", notes: "", attachments: [],
+  status: "בעבודה", who: "", ctrl: "", due: "", notes: "", attachments: [], comments: [],
 });
+
+const uid = () => "c_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+
+function CommentThread({ comments, members, onChange }) {
+  const memberNames = members.map((m) => m.name);
+  const [author, setAuthor] = useState(memberNames[0] || "");
+  const [text, setText] = useState("");
+  const color = (name) => members.find((m) => m.name === name)?.color || "#E8B84B";
+
+  function add() {
+    const t = text.trim();
+    if (!t) return;
+    onChange([...comments, { id: uid(), author: author || memberNames[0] || "—", text: t, ts: new Date().toISOString() }]);
+    setText("");
+  }
+
+  return (
+    <div style={S.commentsWrap}>
+      <label style={{ ...S.fieldLabel, marginBottom: 9 }}>תגובות / דיון ({comments.length})</label>
+      {comments.map((c) => (
+        <div key={c.id} style={S.comment}>
+          <span style={{ ...S.ava, background: color(c.author) }}>{initials(c.author)}</span>
+          <div style={S.commentBody}>
+            <div style={S.commentHead}>
+              <span style={{ ...S.commentAuthor, color: color(c.author) }}>{c.author}</span>
+              <span style={S.commentTs}>{new Date(c.ts).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+            </div>
+            <div style={S.commentText}>{c.text}</div>
+          </div>
+          <button type="button" style={S.commentX} onClick={() => onChange(comments.filter((x) => x.id !== c.id))} aria-label="מחק תגובה">×</button>
+        </div>
+      ))}
+      <div style={S.commentInputRow}>
+        <select style={S.commentSelect} value={author} onChange={(e) => setAuthor(e.target.value)}>
+          {memberNames.map((n) => <option key={n} value={n} style={{ color: "#111" }}>{n}</option>)}
+        </select>
+        <input style={S.commentInput} value={text} placeholder="כתוב תגובה…"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
+        <button type="button" style={{ ...S.attachBtn, padding: "0 14px" }} onClick={add}>הוסף</button>
+      </div>
+    </div>
+  );
+}
 
 // One component, two modes (SPEC §5): add mode when `task` is null.
 export default function TaskModal({ task, members, onSave, onDelete, onClose }) {
@@ -79,6 +123,8 @@ export default function TaskModal({ task, members, onSave, onDelete, onClose }) 
         </div>
 
         <Attachments value={draft.attachments || []} onChange={(a) => set("attachments", a)} />
+
+        <CommentThread comments={draft.comments || []} members={members} onChange={(c) => set("comments", c)} />
 
         <div style={S.modalActions}>
           <button style={S.primaryBtn} onClick={save}>{isEdit ? "שמור שינויים" : "הוסף משימה"}</button>

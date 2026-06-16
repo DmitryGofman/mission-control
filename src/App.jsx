@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   STATUSES, STATUS_ORDER, ASSEMBLIES, PRIORITIES, SEED, DEFAULT_MEMBERS,
-  STORE, readable, initials,
+  PROC_STATUSES, PROC_STATUS_ORDER, PROC_SEED, STORE, readable, initials,
 } from "./lib/constants.js";
 import { loadJSON, saveJSON } from "./lib/storage.js";
 import { S, CSS, MUTED, GOLD } from "./lib/styles.js";
 import TaskModal from "./components/TaskModal.jsx";
 import MembersModal from "./components/MembersModal.jsx";
+import ProcurementModal from "./components/ProcurementModal.jsx";
 
 // Human-readable labels for audit diffs.
 const FIELD_LABELS = {
@@ -29,6 +30,7 @@ function isOverdue(due) {
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
+  const [proc, setProc] = useState([]);
   const [log, setLog] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -38,6 +40,7 @@ export default function App() {
   const [filterAsm, setFilterAsm] = useState(Object.keys(ASSEMBLIES)[1]);
 
   const [editing, setEditing] = useState(undefined); // undefined=closed, null=add, task=edit
+  const [editingProc, setEditingProc] = useState(undefined);
   const [showMembers, setShowMembers] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const importRef = useRef(null);
@@ -46,8 +49,9 @@ export default function App() {
   useEffect(() => {
     const t = loadJSON(STORE.tasks, SEED);
     const m = loadJSON(STORE.members, DEFAULT_MEMBERS);
-    setTasks(t.map((x) => ({ attachments: [], ...x })));
+    setTasks(t.map((x) => ({ attachments: [], comments: [], ...x })));
     setMembers(m);
+    setProc(loadJSON(STORE.procurement, PROC_SEED));
     setLog(loadJSON(STORE.audit, []));
     setFilterPerson(m[0]?.name || "");
     setLoaded(true);
@@ -55,6 +59,7 @@ export default function App() {
 
   useEffect(() => { if (loaded) saveJSON(STORE.tasks, tasks); }, [tasks, loaded]);
   useEffect(() => { if (loaded) saveJSON(STORE.members, members); }, [members, loaded]);
+  useEffect(() => { if (loaded) saveJSON(STORE.procurement, proc); }, [proc, loaded]);
   useEffect(() => { if (loaded) saveJSON(STORE.audit, log); }, [log, loaded]);
 
   // ---------- audit ----------
@@ -99,9 +104,31 @@ export default function App() {
     if (evt?.type === "remove") record("הוסר חבר צוות", evt.name);
   }
 
+  // ---------- procurement ----------
+  function saveProc(draft) {
+    if (draft.id == null) {
+      const id = Math.max(0, ...proc.map((p) => p.id)) + 1;
+      const row = { id, ...draft };
+      setProc((prev) => [...prev, row]);
+      record("נוסף פריט רכש", `"${row.item}"${row.supplier ? " · " + row.supplier : ""}`);
+    } else {
+      const before = proc.find((p) => p.id === draft.id);
+      setProc((prev) => prev.map((p) => (p.id === draft.id ? { ...p, ...draft } : p)));
+      if (before && before.status !== draft.status) record("עודכן רכש", `"${draft.item}" · סטטוס: "${before.status}"→"${draft.status}"`);
+      else record("עודכן רכש", `"${draft.item}"`);
+    }
+    setEditingProc(undefined);
+  }
+
+  function deleteProc(row) {
+    setProc((prev) => prev.filter((p) => p.id !== row.id));
+    record("נמחק פריט רכש", `"${row.item}"`);
+    setEditingProc(undefined);
+  }
+
   // ---------- backup ----------
   function exportBackup() {
-    const blob = new Blob([JSON.stringify({ tasks, members, log, exportedAt: new Date().toISOString() }, null, 2)],
+    const blob = new Blob([JSON.stringify({ tasks, members, proc, log, exportedAt: new Date().toISOString() }, null, 2)],
       { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -114,8 +141,9 @@ export default function App() {
     reader.onload = () => {
       try {
         const data = JSON.parse(reader.result);
-        if (Array.isArray(data.tasks)) setTasks(data.tasks.map((x) => ({ attachments: [], ...x })));
+        if (Array.isArray(data.tasks)) setTasks(data.tasks.map((x) => ({ attachments: [], comments: [], ...x })));
         if (Array.isArray(data.members)) setMembers(data.members);
+        if (Array.isArray(data.proc)) setProc(data.proc);
         if (Array.isArray(data.log)) setLog(data.log);
         record("יובא גיבוי", `${data.tasks?.length || 0} משימות`);
         alert("הגיבוי יובא. שים לב: קבצים/תמונות מצורפים אינם כלולים בגיבוי טקסט זה.");
@@ -160,7 +188,7 @@ export default function App() {
           </div>
           <div style={S.headActions} className="mc-head-actions">
             <div style={S.tabs} className="mc-tabs">
-              {[["board", "מפת משימות"], ["people", "לפי איש צוות"], ["asm", "לפי מכלול"]].map(([k, l]) => (
+              {[["board", "מפת משימות"], ["people", "לפי איש צוות"], ["asm", "לפי מכלול"], ["proc", "בקרת רכש"]].map(([k, l]) => (
                 <button key={k} onClick={() => setView(k)} className="mc-tab"
                   style={{ ...S.tab, ...(view === k ? S.tabOn : {}) }}>{l}</button>
               ))}
@@ -210,18 +238,29 @@ export default function App() {
             <FilterView label="מכלול" options={Object.keys(ASSEMBLIES)} value={filterAsm} onChange={setFilterAsm}
               items={filtered.filter((t) => t.asm === filterAsm)} members={members} onPick={setEditing} colorMap={ASSEMBLIES} />
           )}
+          {view === "proc" && <ProcurementView rows={proc} query={query} onPick={setEditingProc} />}
         </main>
       </div>
 
-      {/* add-task FAB */}
-      <button style={S.fab} onClick={() => setEditing(null)} aria-label="משימה חדשה">
-        <span style={S.fabPlus}>＋</span> משימה חדשה
-      </button>
+      {/* context-aware add FAB */}
+      {view === "proc" ? (
+        <button style={S.fab} onClick={() => setEditingProc(null)} aria-label="פריט רכש חדש">
+          <span style={S.fabPlus}>＋</span> פריט רכש
+        </button>
+      ) : (
+        <button style={S.fab} onClick={() => setEditing(null)} aria-label="משימה חדשה">
+          <span style={S.fabPlus}>＋</span> משימה חדשה
+        </button>
+      )}
 
       {/* modals */}
       {editing !== undefined && (
         <TaskModal task={editing} members={members}
           onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(undefined)} />
+      )}
+      {editingProc !== undefined && (
+        <ProcurementModal row={editingProc} onSave={saveProc} onDelete={deleteProc}
+          onClose={() => setEditingProc(undefined)} />
       )}
       {showMembers && (
         <MembersModal members={members} taskCounts={taskCounts}
@@ -258,6 +297,7 @@ function Card({ t, members, onClick }) {
         <span style={{ ...S.ava, background: memberColor(members, t.who) }}>{initials(t.who)}</span>
         <span style={S.who}>{t.who}</span>
         {att > 0 && <span style={S.clip}>📎 {att}</span>}
+        {(t.comments?.length || 0) > 0 && <span style={S.clip}>💬 {t.comments.length}</span>}
         {t.due && <span style={{ ...S.due, ...(overdue ? S.overdue : {}) }}>{t.due}</span>}
       </div>
     </div>
@@ -296,6 +336,35 @@ function FilterView({ label, options, value, onChange, items, members, onPick, c
           );
         })}
         {!items.length && <div style={S.empty}>אין משימות</div>}
+      </div>
+    </div>
+  );
+}
+
+function ProcurementView({ rows, query, onPick }) {
+  const q = query.trim().toLowerCase();
+  const items = q
+    ? rows.filter((r) => [r.item, r.supplier, r.notes].some((v) => (v || "").toLowerCase().includes(q)))
+    : rows;
+  // Sort by procurement status (להזמין first ... הגיע last).
+  const sorted = [...items].sort((a, b) => PROC_STATUS_ORDER.indexOf(a.status) - PROC_STATUS_ORDER.indexOf(b.status));
+  return (
+    <div>
+      <div style={S.procHeadRow}>
+        <span>פריט</span><span>ספק</span><span>סטטוס</span><span>הוזמן</span><span>צפי הגעה</span><span style={{ textAlign: "end" }}>עלות</span>
+      </div>
+      <div style={S.procTable}>
+        {sorted.map((r) => (
+          <div key={r.id} style={S.procRow} className="card" onClick={() => onPick(r)}>
+            <span style={S.procItem}>{r.item}</span>
+            <span style={S.procCell}>{r.supplier || "—"}</span>
+            <span style={{ ...S.procStatus, background: PROC_STATUSES[r.status], color: readable(PROC_STATUSES[r.status]) }}>{r.status}</span>
+            <span style={S.procDate}>{r.orderDate || "—"}</span>
+            <span style={S.procDate}>{r.eta || "—"}</span>
+            <span style={S.procCost}>{r.cost || "—"}</span>
+          </div>
+        ))}
+        {!sorted.length && <div style={S.empty}>אין פריטי רכש</div>}
       </div>
     </div>
   );
