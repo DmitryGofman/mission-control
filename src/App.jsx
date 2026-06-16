@@ -54,7 +54,7 @@ export default function App() {
     const t = loadJSON(STORE.tasks, SEED);
     const m = loadJSON(STORE.members, DEFAULT_MEMBERS);
     setTasks(t.map((x) => ({ attachments: [], comments: [], checklist: [], tags: [], ...x })));
-    setMembers(m);
+    setMembers(m.map((x) => ({ isController: false, ...x })));
     setProc(loadJSON(STORE.procurement, PROC_SEED));
     setLog(loadJSON(STORE.audit, []));
     setFilterPerson(m[0]?.name || "");

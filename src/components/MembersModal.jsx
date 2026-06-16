@@ -24,6 +24,10 @@ export default function MembersModal({ members, taskCounts, onChange, onClose })
     onChange(members.map((m) => (m.id === id ? { ...m, name } : m)));
   }
 
+  function toggleController(id) {
+    onChange(members.map((m) => (m.id === id ? { ...m, isController: !m.isController } : m)));
+  }
+
   function recolor(id) {
     onChange(members.map((m) => {
       if (m.id !== id) return m;
@@ -50,7 +54,11 @@ export default function MembersModal({ members, taskCounts, onChange, onClose })
             <span style={{ ...S.ava, background: m.color, color: "#0D1117" }}>{initials(m.name)}</span>
             <input style={S.memberName} value={m.name}
               onChange={(e) => rename(m.id, e.target.value)} />
-            <span style={S.memberCount}>{(taskCounts[m.name] || 0)} משימות</span>
+            <button
+              style={{ ...S.ctrlToggle, ...(m.isController ? S.ctrlToggleOn : {}) }}
+              onClick={() => toggleController(m.id)}
+              title={m.isController ? "מסומן כבקר — לחץ להסרה" : "סמן כבקר"}>בקר</button>
+            <span style={S.memberCount}>{(taskCounts[m.name] || 0)}</span>
             <button style={S.fileX} onClick={() => remove(m)} aria-label="הסר" title="הסר">×</button>
           </div>
         ))}

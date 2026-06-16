@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { S } from "../lib/styles.js";
-import { STATUSES, ASSEMBLIES, PRIORITIES, STATUS_ORDER, readable, initials, tagColor } from "../lib/constants.js";
+import { STATUSES, ASSEMBLIES, PRIORITIES, STATUS_ORDER, readable, initials, tagColor, dueToISO, isoToDue } from "../lib/constants.js";
 import { useEscape } from "../lib/useEscape.js";
 import Attachments from "./Attachments.jsx";
 
@@ -148,6 +148,12 @@ export default function TaskModal({ task, members, tagSuggestions = [], onSave, 
   const whoOptions = memberNames.includes(draft.who) || !draft.who
     ? memberNames : [draft.who, ...memberNames];
 
+  // Controllers (בקר) come from members flagged isController; fall back to all
+  // members if none are flagged yet. Keep any legacy/free-text value too.
+  const flagged = members.filter((m) => m.isController).map((m) => m.name);
+  const ctrlBase = flagged.length ? flagged : memberNames;
+  const ctrlOptions = [...new Set([...ctrlBase, ...(draft.ctrl && !ctrlBase.includes(draft.ctrl) ? [draft.ctrl] : [])])];
+
   function save() {
     if (!draft.task.trim()) { alert("יש להזין שם משימה."); return; }
     onSave({ ...draft, task: draft.task.trim(), who: draft.who || memberNames[0] || "" });
@@ -178,13 +184,15 @@ export default function TaskModal({ task, members, tagSuggestions = [], onSave, 
             <Select value={draft.who} options={whoOptions} onChange={(v) => set("who", v)} />
           </Field>
           <Field label="בקר">
-            <input style={S.modalInput} value={draft.ctrl} placeholder="—"
-              onChange={(e) => set("ctrl", e.target.value)} list="mc-members" />
-            <datalist id="mc-members">{memberNames.map((n) => <option key={n} value={n} />)}</datalist>
+            <select value={draft.ctrl} onChange={(e) => set("ctrl", e.target.value)}
+              style={{ ...S.modalInput, fontWeight: 700, cursor: "pointer", color: draft.ctrl ? "#E6EDF3" : "#8B97A8" }}>
+              <option value="" style={{ color: "#111" }}>—</option>
+              {ctrlOptions.map((n) => <option key={n} value={n} style={{ color: "#111" }}>{n}</option>)}
+            </select>
           </Field>
-          <Field label="תג״ב (DD.M.YY)">
-            <input style={S.modalInput} value={draft.due} placeholder="—"
-              onChange={(e) => set("due", e.target.value)} />
+          <Field label="תג״ב">
+            <input type="date" style={S.dateInput} value={dueToISO(draft.due)}
+              onChange={(e) => set("due", isoToDue(e.target.value))} />
           </Field>
         </div>
 
