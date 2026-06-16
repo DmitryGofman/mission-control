@@ -5,25 +5,25 @@ export const BG = "#0B0E14", PANEL = "#141A24", PANEL2 = "#1B2230",
 export const S = {
   boot: { background: BG, color: GOLD, minHeight: "100vh", display: "grid", placeItems: "center", fontFamily: "system-ui", fontSize: 16 },
   app: { background: `radial-gradient(900px 500px at 85% -10%, rgba(88,166,255,.06), transparent), ${BG}`, color: INK, minHeight: "100vh", fontFamily: "'Heebo',system-ui,sans-serif", display: "flex", flexDirection: "column" },
-  head: { borderBottom: `1px solid ${LINE}`, padding: "16px 20px 14px", background: "rgba(13,17,23,.6)", backdropFilter: "blur(6px)", position: "sticky", top: 0, zIndex: 10 },
-  titleRow: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
-  crest: { width: 40, height: 40, borderRadius: 10, display: "grid", placeItems: "center", color: GOLD, fontSize: 18, background: "linear-gradient(145deg,#1C2230,#0D1117)", border: `1px solid ${LINE}`, boxShadow: "inset 0 0 0 1px rgba(232,184,75,.15)" },
-  h1: { fontSize: 21, fontWeight: 800, margin: 0, letterSpacing: "-.3px" },
-  sub: { fontSize: 12.5, color: MUTED, marginTop: 2 },
-  headActions: { marginInlineStart: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" },
-  ghostBtn: { font: "inherit", fontSize: 13, fontWeight: 600, color: INK, background: PANEL2, border: `1px solid ${LINE}`, borderRadius: 9, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 },
-  tabs: { display: "flex", gap: 4, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 10, padding: 4 },
-  tab: { font: "inherit", fontSize: 13, fontWeight: 600, color: MUTED, background: "none", border: "none", padding: "7px 13px", borderRadius: 7, cursor: "pointer" },
+  head: { borderBottom: `1px solid ${LINE}`, padding: "8px 12px", background: "rgba(13,17,23,.6)", backdropFilter: "blur(6px)", position: "sticky", top: 0, zIndex: 10 },
+  titleRow: { display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" },
+  crest: { width: 28, height: 28, borderRadius: 8, display: "grid", placeItems: "center", color: GOLD, fontSize: 13, background: "linear-gradient(145deg,#1C2230,#0D1117)", border: `1px solid ${LINE}`, boxShadow: "inset 0 0 0 1px rgba(232,184,75,.15)", flexShrink: 0 },
+  h1: { fontSize: 15, fontWeight: 800, margin: 0, letterSpacing: "-.3px", lineHeight: 1.1 },
+  sub: { fontSize: 10.5, color: MUTED, marginTop: 1 },
+  headRight: { marginInlineStart: "auto", display: "flex", gap: 6, alignItems: "center", flexShrink: 0 },
+  ghostBtn: { font: "inherit", fontSize: 12, fontWeight: 600, color: INK, background: PANEL2, border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" },
+  controlsRow: { display: "flex", gap: 7, alignItems: "center", marginTop: 7 },
+  tabs: { display: "flex", gap: 3, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 9, padding: 3, flexShrink: 0 },
+  tab: { font: "inherit", fontSize: 12, fontWeight: 600, color: MUTED, background: "none", border: "none", padding: "5px 10px", borderRadius: 6, cursor: "pointer", whiteSpace: "nowrap" },
   tabOn: { background: PANEL2, color: INK },
-  searchWrap: { position: "relative", flex: "0 1 240px" },
-  search: { width: "100%", background: PANEL, border: `1px solid ${LINE}`, borderRadius: 9, padding: "8px 12px", color: INK, font: "inherit", fontSize: 13, outline: "none" },
+  search: { flex: "1 1 100px", minWidth: 0, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 10px", color: INK, font: "inherit", fontSize: 12.5, outline: "none" },
   // compact summary strip (replaces the big KPI deck)
   summaryBar: { display: "flex", alignItems: "center", gap: 7, marginTop: 11, flexWrap: "wrap" },
   sumChip: { display: "inline-flex", alignItems: "center", gap: 6, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 20, padding: "3px 10px", fontSize: 11.5, color: MUTED },
   sumDot: { width: 7, height: 7, borderRadius: "50%", flexShrink: 0 },
   sumN: { fontWeight: 800, fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5 },
   // three-dots icon button
-  iconBtn: { font: "inherit", fontSize: 18, fontWeight: 700, color: INK, background: PANEL2, border: `1px solid ${LINE}`, borderRadius: 9, width: 38, height: 36, cursor: "pointer", display: "grid", placeItems: "center", lineHeight: 1, flexShrink: 0 },
+  iconBtn: { font: "inherit", fontSize: 16, fontWeight: 700, color: INK, background: PANEL2, border: `1px solid ${LINE}`, borderRadius: 8, width: 32, height: 30, cursor: "pointer", display: "grid", placeItems: "center", lineHeight: 1, flexShrink: 0 },
   // options side panel sections
   panelSection: { padding: "14px 16px", borderBottom: `1px solid ${LINE}` },
   panelTitle: { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 10, letterSpacing: ".3px" },
@@ -173,12 +173,9 @@ input::placeholder, textarea::placeholder { color: #5A6373; }
   .mc-board { grid-template-columns: 1fr 1fr !important; }
 }
 @media (max-width: 560px) {
-  .mc-kpis { grid-template-columns: repeat(3,1fr) !important; }
   .mc-board { grid-template-columns: 1fr !important; }
-  .mc-tabs { width: 100%; order: 3; overflow-x: auto; }
-  .mc-tab { flex: 1; white-space: nowrap; }
+  .mc-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .mc-fields { grid-template-columns: 1fr !important; }
   .mc-fvstats { width: 100%; margin-inline-start: 0 !important; }
-  .mc-head-actions { width: 100%; }
 }
 `;

@@ -265,39 +265,30 @@ export default function App() {
     <div dir="rtl" style={S.app}>
       <style>{CSS}</style>
 
-      {/* header / KPI deck */}
+      {/* compact header */}
       <header style={S.head}>
         <div style={S.titleRow}>
           <div style={S.crest}>◆</div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <h1 style={S.h1}>מרכז בקרת משימות</h1>
-            <div style={S.sub}>{tasks.length} משימות · {counts["בוצע"]} הושלמו · {members.length} חברי צוות</div>
+            <div style={S.sub}>{tasks.length} משימות · {counts["בוצע"]} הושלמו</div>
           </div>
-          <div style={S.headActions} className="mc-head-actions">
-            <div style={S.tabs} className="mc-tabs">
-              {[["board", "מפת משימות"], ["people", "לפי איש צוות"], ["asm", "לפי מכלול"], ["proc", "בקרת רכש"]].map(([k, l]) => (
-                <button key={k} onClick={() => setView(k)} className="mc-tab"
-                  style={{ ...S.tab, ...(view === k ? S.tabOn : {}) }}>{l}</button>
-              ))}
-            </div>
-            <input style={S.search} value={query} placeholder="חיפוש…"
-              onChange={(e) => setQuery(e.target.value)} />
+          <div style={S.headRight}>
             <button style={S.ghostBtn} onClick={() => setShowMembers(true)}>👥 צוות</button>
             <button style={S.iconBtn} onClick={() => setShowPanel(true)} aria-label="סיכום ואפשרויות" title="סיכום ואפשרויות">⋮</button>
-            <input ref={importRef} type="file" accept="application/json" hidden
-              onChange={(e) => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ""; }} />
           </div>
         </div>
-        <div style={S.summaryBar}>
-          <span style={{ ...S.sumChip, borderColor: GOLD + "66" }}>
-            <span style={{ ...S.sumN, color: GOLD }}>{tasks.length}</span> סה״כ
-          </span>
-          {STATUS_ORDER.map((s) => (
-            <span key={s} style={S.sumChip}>
-              <span style={{ ...S.sumDot, background: STATUSES[s].color }} />
-              <span style={{ ...S.sumN, color: STATUSES[s].color }}>{counts[s]}</span> {s}
-            </span>
-          ))}
+        <div style={S.controlsRow}>
+          <div style={S.tabs} className="mc-tabs">
+            {[["board", "משימות"], ["people", "איש צוות"], ["asm", "מכלול"], ["proc", "רכש"]].map(([k, l]) => (
+              <button key={k} onClick={() => setView(k)} className="mc-tab"
+                style={{ ...S.tab, ...(view === k ? S.tabOn : {}) }}>{l}</button>
+            ))}
+          </div>
+          <input style={S.search} value={query} placeholder="חיפוש…"
+            onChange={(e) => setQuery(e.target.value)} />
+          <input ref={importRef} type="file" accept="application/json" hidden
+            onChange={(e) => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ""; }} />
         </div>
       </header>
 
