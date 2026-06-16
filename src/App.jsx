@@ -48,7 +48,9 @@ export default function App() {
   const [showMembers, setShowMembers] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showPanel, setShowPanel] = useState(false);
+  const [undo, setUndo] = useState(null);
   const importRef = useRef(null);
+  const undoTimer = useRef(null);
 
   // ---------- load / persist ----------
   useEffect(() => {
@@ -106,6 +108,29 @@ export default function App() {
   function patchTask(id, fields, detail) {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...fields } : t)));
     if (detail) record("עודכנה משימה", detail);
+  }
+
+  // Agenda quick-actions show an undo snackbar (swipes are easy to trigger by
+  // accident). `prev` is the task as it was before the change, so undo restores it.
+  function showUndo(msg, prev) {
+    setUndo({ msg, prev });
+    clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndo(null), 6000);
+  }
+  function doUndo() {
+    if (!undo) return;
+    setTasks((prevTasks) => prevTasks.map((t) => (t.id === undo.prev.id ? undo.prev : t)));
+    record("בוטל שינוי", `"${undo.prev.task}"`);
+    clearTimeout(undoTimer.current);
+    setUndo(null);
+  }
+  function agendaComplete(t) {
+    patchTask(t.id, { status: "בוצע" }, `"${t.task}" · הושלמה`);
+    showUndo(`"${t.task}" — הושלמה`, t);
+  }
+  function agendaReschedule(t, due) {
+    patchTask(t.id, { due }, `"${t.task}" · תג״ב → ${due || "—"}`);
+    showUndo(`"${t.task}" — תג״ב ${due || "הוסר"}`, t);
   }
 
   // ---------- members ----------
@@ -330,8 +355,7 @@ export default function App() {
           )}
           {view === "agenda" && (
             <AgendaView tasks={filtered} members={members} onPick={setEditing}
-              onComplete={(t) => patchTask(t.id, { status: "בוצע" }, `"${t.task}" · הושלמה`)}
-              onReschedule={(t, due) => patchTask(t.id, { due }, `"${t.task}" · תג״ב → ${due || "—"}`)} />
+              onComplete={agendaComplete} onReschedule={agendaReschedule} />
           )}
           {view === "proc" && <ProcurementView rows={proc} query={query} onPick={setEditingProc} />}
         </main>
@@ -360,6 +384,12 @@ export default function App() {
       {showMembers && (
         <MembersModal members={members} taskCounts={taskCounts}
           onChange={changeMembers} onClose={() => setShowMembers(false)} />
+      )}
+      {undo && (
+        <div style={S.snackbar} className="snackbar-in">
+          <span style={S.snackMsg}>{undo.msg}</span>
+          <button style={S.snackBtn} onClick={doUndo}>↩ בטל</button>
+        </div>
       )}
       {showLog && <AuditDrawer log={log} onClear={() => setLog([])} onClose={() => setShowLog(false)} />}
       {showPanel && (

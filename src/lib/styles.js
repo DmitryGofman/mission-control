@@ -69,6 +69,18 @@ export const S = {
   popItem: { display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "start", background: "none", border: "none", color: INK, font: "inherit", fontSize: 13, padding: "8px 9px", borderRadius: 8, cursor: "pointer" },
   popItemDate: { marginInlineStart: "auto", fontSize: 11, color: MUTED, fontFamily: "'JetBrains Mono',monospace" },
   popDateRow: { display: "flex", alignItems: "center", gap: 7, padding: "6px 8px", borderTop: `1px solid ${LINE}`, marginTop: 4 },
+  // inline calendar (reschedule)
+  calWrap: { borderTop: `1px solid ${LINE}`, marginTop: 4, paddingTop: 6 },
+  calHead: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 6px 8px", fontSize: 12.5, fontWeight: 700 },
+  calNav: { background: PANEL, border: `1px solid ${LINE}`, borderRadius: 7, color: INK, fontSize: 14, lineHeight: 1, cursor: "pointer", padding: "3px 9px" },
+  calGrid: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 2, padding: "0 2px 2px" },
+  calDow: { fontSize: 9.5, color: MUTED, textAlign: "center", padding: "2px 0", fontWeight: 700 },
+  calDay: { fontSize: 12, color: INK, background: "none", border: "none", borderRadius: 6, padding: "6px 0", cursor: "pointer", textAlign: "center" },
+  calToday: { outline: `1px solid ${GOLD}`, color: GOLD, fontWeight: 800 },
+  // undo snackbar
+  snackbar: { position: "fixed", left: "50%", transform: "translateX(-50%)", bottom: 78, zIndex: 60, display: "flex", alignItems: "center", gap: 12, background: "#1B2230", border: `1px solid ${LINE}`, borderRadius: 12, padding: "10px 14px", boxShadow: "0 12px 36px rgba(0,0,0,.5)", maxWidth: "calc(100vw - 32px)" },
+  snackMsg: { fontSize: 13, color: INK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  snackBtn: { background: "none", border: "none", color: GOLD, font: "inherit", fontSize: 13, fontWeight: 800, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", gap: 5 },
   // filter view
   fv: { maxWidth: 760 },
   fvHead: { display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" },
@@ -184,7 +196,10 @@ export const CSS = `
 body { margin: 0; }
 .card:hover { border-color: #41506b !important; transform: translateY(-1px); }
 .pop-item:hover { background: #243044; }
+.cal-day:hover { background: #243044; }
 .swipe-snap { transition: transform .18s ease; }
+.snackbar-in { animation: snackIn .2s ease; }
+@keyframes snackIn { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .blink { animation: blink 1.2s infinite; }
 @keyframes blink { 0%,100%{opacity:.4} 50%{opacity:1} }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
