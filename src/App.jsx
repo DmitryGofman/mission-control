@@ -46,6 +46,7 @@ export default function App() {
   const [editingProc, setEditingProc] = useState(undefined);
   const [showMembers, setShowMembers] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  const [showPanel, setShowPanel] = useState(false);
   const importRef = useRef(null);
 
   // ---------- load / persist ----------
@@ -155,6 +156,84 @@ export default function App() {
     reader.readAsText(file);
   }
 
+  // ---------- status report document (for management) ----------
+  // A periodic, presentation-ready status doc covering ALL statuses:
+  // blockers (תקוע) first, then in-progress, in-review, completed.
+  function exportDevSummary() {
+    const esc = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const today = new Date().toLocaleDateString("he-IL", { day: "2-digit", month: "long", year: "numeric" });
+    const overdueCount = tasks.filter((t) => isOverdue(t.due) && t.status !== "בוצע").length;
+
+    // Order sections for management readability: blockers → in-progress → review → done.
+    const REPORT_ORDER = ["תקוע", "בעבודה", "לבדיקה", "בוצע"];
+    const LABELS = { "תקוע": "תקועים / חוסמים", "בעבודה": "בעבודה כעת", "לבדיקה": "ממתינות לבדיקה", "בוצע": "הושלמו" };
+
+    const taskRow = (t, status) => {
+      const overdue = isOverdue(t.due) && status !== "בוצע";
+      const chk = t.checklist?.length ? ` · תת-משימות: ${t.checklist.filter((c) => c.done).length}/${t.checklist.length}` : "";
+      const tags = t.tags?.length ? `<div class="tags">${t.tags.map((x) => `<span class="tag">${esc(x)}</span>`).join("")}</div>` : "";
+      const asmColor = ASSEMBLIES[t.asm] || "#5A6573";
+      return `<div class="task">
+        <div class="row1"><span class="asm" style="background:${asmColor};color:${readable(asmColor)}">${esc(t.asm)}</span><span class="ttl">${esc(t.task)}</span></div>
+        <div class="meta">מבצע: <b>${esc(t.who || "—")}</b>${t.ctrl ? ` · בקר: ${esc(t.ctrl)}` : ""}${t.due ? ` · תג״ב: <span class="${overdue ? "od" : ""}">${esc(t.due)}${overdue ? " ⚠" : ""}</span>` : ""}${chk}</div>
+        ${t.notes ? `<div class="notes">${esc(t.notes)}</div>` : ""}
+        ${tags}
+      </div>`;
+    };
+
+    const sections = REPORT_ORDER.map((status) => {
+      const items = tasks.filter((t) => t.status === status);
+      if (!items.length) return "";
+      const c = STATUSES[status].color;
+      return `<h2 class="status" style="border-color:${c}"><span class="sdot" style="background:${c}"></span>${esc(LABELS[status])} <span class="muted">(${items.length})</span></h2>
+        ${items.map((t) => taskRow(t, status)).join("")}`;
+    }).join("");
+
+    const summaryChips = `<span class="chip"><b>${tasks.length}</b> סה״כ</span>` +
+      STATUS_ORDER.map((s) => `<span class="chip"><b style="color:${STATUSES[s].color}">${counts[s]}</b> ${esc(s)}</span>`).join("");
+
+    const attention = (counts["תקוע"] || overdueCount)
+      ? `<div class="attn"><b>נקודות לתשומת לב:</b> ${counts["תקוע"] ? `${counts["תקוע"]} משימות תקועות/חוסמות` : ""}${counts["תקוע"] && overdueCount ? " · " : ""}${overdueCount ? `${overdueCount} משימות באיחור תג״ב` : ""}.</div>`
+      : "";
+
+    const html = `<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8">
+<title>דוח סטטוס פרויקט — מרכז בקרת משימות</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;800&display=swap');
+  body{font-family:'Heebo',system-ui,sans-serif;max-width:840px;margin:40px auto;padding:0 20px;color:#1a1f29;line-height:1.55}
+  h1{font-size:26px;margin:0 0 4px}
+  h2.status{font-size:17px;margin:26px 0 12px;display:flex;align-items:center;gap:9px;border-right:4px solid;padding:2px 10px 6px 0}
+  .sdot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .meta-top{color:#6b7686;font-size:13px;margin-bottom:14px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+  .chip{border:1px solid #e3e7ee;border-radius:20px;padding:4px 12px;font-size:13px}
+  .attn{background:#fff5f5;border:1px solid #f3c9c9;border-radius:10px;padding:10px 13px;font-size:13px;color:#7a2e2e;margin:8px 0 4px}
+  .asm{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;flex-shrink:0}
+  .task{border:1px solid #e8ebf1;border-radius:10px;padding:11px 13px;margin-bottom:9px}
+  .row1{display:flex;align-items:center;gap:9px}
+  .ttl{font-weight:600;font-size:14.5px} .meta{color:#5a6473;font-size:12.5px;margin-top:5px}
+  .od{color:#c0392b;font-weight:700}
+  .notes{font-size:12.5px;color:#3b4351;margin-top:6px;white-space:pre-wrap;background:#f7f8fa;border-radius:7px;padding:7px 9px}
+  .tags{margin-top:7px;display:flex;flex-wrap:wrap;gap:5px}
+  .tag{font-size:11px;background:#eef1f6;border-radius:20px;padding:1px 8px;color:#4a5365}
+  .muted{color:#8b97a8} @media print{body{margin:0} .task{break-inside:avoid}}
+</style></head><body>
+  <h1>דוח סטטוס פרויקט</h1>
+  <div class="meta-top">מרכז בקרת משימות · הופק בתאריך ${today} · ${tasks.length} משימות · ${counts["בוצע"]} הושלמו</div>
+  <div class="chips">${summaryChips}</div>
+  ${attention}
+  ${sections || '<p class="muted">אין משימות.</p>'}
+  <p class="muted" style="margin-top:30px;font-size:12px">להמרה ל-PDF / מצגת: פתחו את הקובץ בדפדפן והדפיסו (Ctrl/Cmd+P) → שמירה כ-PDF.</p>
+</body></html>`;
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `דוח-סטטוס-${new Date().toISOString().slice(0, 10)}.html`;
+    a.click(); URL.revokeObjectURL(url);
+    record("הופק דוח סטטוס", `${tasks.length} משימות · ${counts["תקוע"]} תקועות`);
+  }
+
   // ---------- derived ----------
   const counts = useMemo(
     () => STATUS_ORDER.reduce((a, s) => ((a[s] = tasks.filter((t) => t.status === s).length), a), {}),
@@ -204,16 +283,21 @@ export default function App() {
             <input style={S.search} value={query} placeholder="חיפוש…"
               onChange={(e) => setQuery(e.target.value)} />
             <button style={S.ghostBtn} onClick={() => setShowMembers(true)}>👥 צוות</button>
-            <button style={S.ghostBtn} onClick={() => setShowLog(true)}>🕘 יומן</button>
-            <button style={S.ghostBtn} onClick={exportBackup} title="ייצוא גיבוי">⬇️</button>
-            <button style={S.ghostBtn} onClick={() => importRef.current?.click()} title="ייבוא גיבוי">⬆️</button>
+            <button style={S.iconBtn} onClick={() => setShowPanel(true)} aria-label="סיכום ואפשרויות" title="סיכום ואפשרויות">⋮</button>
             <input ref={importRef} type="file" accept="application/json" hidden
               onChange={(e) => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ""; }} />
           </div>
         </div>
-        <div style={S.kpis} className="mc-kpis">
-          <Kpi n={tasks.length} label="סה״כ" color={GOLD} />
-          {STATUS_ORDER.map((s) => <Kpi key={s} n={counts[s]} label={s} color={STATUSES[s].color} />)}
+        <div style={S.summaryBar}>
+          <span style={{ ...S.sumChip, borderColor: GOLD + "66" }}>
+            <span style={{ ...S.sumN, color: GOLD }}>{tasks.length}</span> סה״כ
+          </span>
+          {STATUS_ORDER.map((s) => (
+            <span key={s} style={S.sumChip}>
+              <span style={{ ...S.sumDot, background: STATUSES[s].color }} />
+              <span style={{ ...S.sumN, color: STATUSES[s].color }}>{counts[s]}</span> {s}
+            </span>
+          ))}
         </div>
       </header>
 
@@ -275,17 +359,71 @@ export default function App() {
           onChange={changeMembers} onClose={() => setShowMembers(false)} />
       )}
       {showLog && <AuditDrawer log={log} onClear={() => setLog([])} onClose={() => setShowLog(false)} />}
+      {showPanel && (
+        <SidePanel
+          counts={counts} total={tasks.length} members={members.length}
+          onDevSummary={exportDevSummary}
+          onOpenLog={() => { setShowPanel(false); setShowLog(true); }}
+          onExport={exportBackup}
+          onImport={() => importRef.current?.click()}
+          onClose={() => setShowPanel(false)} />
+      )}
     </div>
   );
 }
 
 // ============================== sub-components ==============================
-function Kpi({ n, label, color }) {
+function SidePanel({ counts, total, members, onDevSummary, onOpenLog, onExport, onImport, onClose }) {
+  useEscape(onClose);
   return (
-    <div style={{ ...S.kpi, borderColor: color }}>
-      <div style={{ ...S.kpiN, color }}>{n}</div>
-      <div style={S.kpiL}>{label}</div>
-    </div>
+    <>
+      <div style={S.drawerScrim} onClick={onClose} />
+      <aside style={S.drawer}>
+        <div style={S.railHead}>
+          סיכום ואפשרויות
+          <button style={S.drawerClose} onClick={onClose} aria-label="סגור">×</button>
+        </div>
+
+        <div style={S.panelSection}>
+          <div style={S.panelTitle}>סיכום משימות</div>
+          <div style={S.sumRow}>
+            <span style={{ ...S.sumDot, background: GOLD }} /> סה״כ
+            <span style={{ ...S.sumRowN, color: GOLD }}>{total}</span>
+          </div>
+          {STATUS_ORDER.map((s) => (
+            <div key={s} style={S.sumRow}>
+              <span style={{ ...S.sumDot, background: STATUSES[s].color }} /> {s}
+              <span style={{ ...S.sumRowN, color: STATUSES[s].color }}>{counts[s]}</span>
+            </div>
+          ))}
+          <div style={{ ...S.sumRow, color: MUTED, fontSize: 12 }}>חברי צוות<span style={{ ...S.sumRowN, color: MUTED, fontSize: 13 }}>{members}</span></div>
+        </div>
+
+        <div style={S.panelSection}>
+          <div style={S.panelTitle}>כלים</div>
+          <button style={S.panelBtn} onClick={onDevSummary}>
+            <span style={S.panelBtnIcon}>📄</span>
+            <span>ייצוא דוח סטטוס<div style={S.panelBtnSub}>סטטוס מלא — תקועים, בעבודה והושלמו · להפקת מצגת</div></span>
+          </button>
+          <button style={S.panelBtn} onClick={onOpenLog}>
+            <span style={S.panelBtnIcon}>🕘</span>
+            <span>יומן פעילות<div style={S.panelBtnSub}>היסטוריית שינויים</div></span>
+          </button>
+          <button style={S.panelBtn} onClick={onExport}>
+            <span style={S.panelBtnIcon}>⬇️</span>
+            <span>ייצוא גיבוי (JSON)<div style={S.panelBtnSub}>שמירת כל הנתונים לקובץ</div></span>
+          </button>
+          <button style={S.panelBtn} onClick={onImport}>
+            <span style={S.panelBtnIcon}>⬆️</span>
+            <span>ייבוא גיבוי (JSON)<div style={S.panelBtnSub}>שחזור מקובץ גיבוי</div></span>
+          </button>
+        </div>
+
+        <div style={S.panelSection}>
+          <div style={S.panelHint}>אפשרויות נוספות יתווספו כאן בהמשך — דוחות, סינונים שמורים, הגדרות פרויקט ועוד.</div>
+        </div>
+      </aside>
+    </>
   );
 }
 
