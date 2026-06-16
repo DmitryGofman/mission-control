@@ -9,6 +9,7 @@ import { S, CSS, MUTED, GOLD } from "./lib/styles.js";
 import TaskModal from "./components/TaskModal.jsx";
 import MembersModal from "./components/MembersModal.jsx";
 import ProcurementModal from "./components/ProcurementModal.jsx";
+import AgendaView from "./components/AgendaView.jsx";
 
 // Human-readable labels for audit diffs.
 const FIELD_LABELS = {
@@ -99,6 +100,12 @@ export default function App() {
     setTasks((prev) => prev.filter((t) => t.id !== task.id));
     record("נמחקה משימה", `"${task.task}"`);
     setEditing(undefined);
+  }
+
+  // Lightweight field patch (used by the agenda quick-actions).
+  function patchTask(id, fields, detail) {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...fields } : t)));
+    if (detail) record("עודכנה משימה", detail);
   }
 
   // ---------- members ----------
@@ -280,7 +287,7 @@ export default function App() {
         </div>
         <div style={S.controlsRow}>
           <div style={S.tabs} className="mc-tabs">
-            {[["board", "משימות"], ["people", "איש צוות"], ["asm", "מכלול"], ["proc", "רכש"]].map(([k, l]) => (
+            {[["board", "משימות"], ["agenda", "לו״ז"], ["people", "איש צוות"], ["asm", "מכלול"], ["proc", "רכש"]].map(([k, l]) => (
               <button key={k} onClick={() => setView(k)} className="mc-tab"
                 style={{ ...S.tab, ...(view === k ? S.tabOn : {}) }}>{l}</button>
             ))}
@@ -320,6 +327,11 @@ export default function App() {
           {view === "asm" && (
             <FilterView label="מכלול" options={Object.keys(ASSEMBLIES)} value={filterAsm} onChange={setFilterAsm}
               items={filtered.filter((t) => t.asm === filterAsm)} members={members} onPick={setEditing} colorMap={ASSEMBLIES} />
+          )}
+          {view === "agenda" && (
+            <AgendaView tasks={filtered} members={members} onPick={setEditing}
+              onComplete={(t) => patchTask(t.id, { status: "בוצע" }, `"${t.task}" · הושלמה`)}
+              onReschedule={(t, due) => patchTask(t.id, { due }, `"${t.task}" · תג״ב → ${due || "—"}`)} />
           )}
           {view === "proc" && <ProcurementView rows={proc} query={query} onPick={setEditingProc} />}
         </main>

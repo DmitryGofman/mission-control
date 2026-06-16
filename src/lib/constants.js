@@ -99,6 +99,30 @@ export function isoToDue(iso) {
   return `${+d}.${+mo}.${String(+y).slice(2)}`;
 }
 
+// Date <-> "D.M.YY" for the agenda grouping & quick reschedule.
+export function dateToDue(date) {
+  return `${date.getDate()}.${date.getMonth() + 1}.${String(date.getFullYear()).slice(2)}`;
+}
+
+export function dueToDate(due) {
+  const iso = dueToISO(due);
+  if (!iso) return null;
+  const [y, mo, d] = iso.split("-").map(Number);
+  return new Date(y, mo - 1, d);
+}
+
+export function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+export function addDays(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
 // Deterministic color for a free-text tag, so the same label always looks the same.
 export function tagColor(label) {
   let h = 0;
