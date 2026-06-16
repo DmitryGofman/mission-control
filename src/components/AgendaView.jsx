@@ -125,13 +125,15 @@ function InlineCalendar({ onPick }) {
 function Reschedule({ anchor, onPick, onClose }) {
   const [showCal, setShowCal] = useState(false);
   const today = startOfToday();
-  const dToSat = (6 - today.getDay() + 7) % 7;
-  const saturday = addDays(today, dToSat === 0 ? 7 : dToSat);
+  // Israeli work week is Sun–Thu, so "end of week" is the upcoming Thursday
+  // (getDay 4). If today is already Thursday, jump to next week's Thursday.
+  const dToThu = (4 - today.getDay() + 7) % 7;
+  const endOfWeek = addDays(today, dToThu === 0 ? 7 : dToThu);
 
   const opts = [
     { label: "היום", icon: "📌", date: today },
     { label: "מחר", icon: "☀️", date: addDays(today, 1) },
-    { label: "סוף שבוע", icon: "🛋️", date: saturday },
+    { label: "סוף שבוע", icon: "🛋️", date: endOfWeek },
     { label: "בעוד שבוע", icon: "📆", date: addDays(today, 7) },
     { label: "ללא תאריך", icon: "🚫", date: null },
   ];
