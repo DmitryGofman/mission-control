@@ -1,11 +1,14 @@
 // ============================== persistence ==============================
-// Structured data (tasks, members, audit log) lives in localStorage.
-// Binary attachments (files + photos) live in IndexedDB so large images
-// don't blow the ~5MB localStorage quota — the task only keeps metadata.
+// Web build: structured data in localStorage, attachment blobs in IndexedDB.
+// Desktop build (Electron): the same calls are transparently routed to a local
+// SQLite database file via `window.mcStore` (exposed by the Electron preload).
+// The web app code is unchanged — it just calls loadJSON/saveJSON/putBlob/etc.
+
+const desktop = typeof window !== "undefined" && window.mcStore;
 
 export function loadJSON(key, fallback) {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = desktop ? window.mcStore.getItemSync(key) : localStorage.getItem(key);
     return raw ? JSON.parse(raw) : fallback;
   } catch {
     return fallback;
@@ -14,7 +17,9 @@ export function loadJSON(key, fallback) {
 
 export function saveJSON(key, value) {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    const json = JSON.stringify(value);
+    if (desktop) window.mcStore.setItemSync(key, json);
+    else localStorage.setItem(key, json);
   } catch (e) {
     console.warn("saveJSON failed", e);
   }
@@ -51,14 +56,24 @@ async function tx(mode, fn) {
 }
 
 export async function putBlob(id, blob) {
+  if (desktop) {
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    return window.mcStore.putBlob(id, buf, blob.type || "application/octet-stream");
+  }
   return tx("readwrite", (s) => s.put(blob, id));
 }
 
 export async function getBlob(id) {
+  if (desktop) {
+    const rec = await window.mcStore.getBlob(id);
+    if (!rec) return undefined;
+    return new Blob([rec.bytes], { type: rec.type || "application/octet-stream" });
+  }
   return tx("readonly", (s) => s.get(id));
 }
 
 export async function deleteBlob(id) {
+  if (desktop) return window.mcStore.deleteBlob(id);
   return tx("readwrite", (s) => s.delete(id));
 }
 
