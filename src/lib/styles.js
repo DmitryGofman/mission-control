@@ -51,6 +51,24 @@ export const S = {
   overdue: { color: "#F85149", fontWeight: 700 },
   clip: { display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10.5, color: MUTED },
   empty: { color: "#5A6373", fontSize: 12, textAlign: "center", padding: "16px 0" },
+  // agenda (date-grouped) view
+  agenda: { maxWidth: 760 },
+  agendaGroup: { marginBottom: 18 },
+  agendaHead: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 800, marginBottom: 9, paddingBottom: 6, borderBottom: `1px solid ${LINE}` },
+  agendaCount: { marginInlineStart: "auto", fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, color: MUTED, fontWeight: 600 },
+  swipeOuter: { position: "relative", borderRadius: 10, overflow: "hidden", marginBottom: 8 },
+  swipeAction: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, display: "flex", alignItems: "center", gap: 6, padding: "0 16px", fontSize: 13, fontWeight: 800, color: "#fff" },
+  swipeActionL: { justifyContent: "flex-start", background: "#2E7D46" },
+  swipeActionR: { justifyContent: "flex-end", background: "#1F6FEB" },
+  popoverFixed: { position: "fixed", zIndex: 56, background: PANEL2, border: `1px solid ${LINE}`, borderRadius: 12, padding: 8, boxShadow: "0 18px 50px rgba(0,0,0,.6)", width: 210 },
+  agendaRow: { position: "relative", display: "flex", alignItems: "center", gap: 10, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 10, padding: "11px 12px", cursor: "pointer", touchAction: "pan-y", userSelect: "none", willChange: "transform" },
+  reschedBtn: { background: PANEL2, border: `1px solid ${LINE}`, borderRadius: 8, color: MUTED, fontSize: 14, cursor: "pointer", padding: "4px 8px", lineHeight: 1, flexShrink: 0 },
+  popScrim: { position: "fixed", inset: 0, zIndex: 55 },
+  popover: { position: "absolute", zIndex: 56, background: PANEL2, border: `1px solid ${LINE}`, borderRadius: 12, padding: 8, boxShadow: "0 18px 50px rgba(0,0,0,.6)", width: 210 },
+  popTitle: { fontSize: 10.5, color: MUTED, fontWeight: 700, padding: "4px 8px 7px" },
+  popItem: { display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "start", background: "none", border: "none", color: INK, font: "inherit", fontSize: 13, padding: "8px 9px", borderRadius: 8, cursor: "pointer" },
+  popItemDate: { marginInlineStart: "auto", fontSize: 11, color: MUTED, fontFamily: "'JetBrains Mono',monospace" },
+  popDateRow: { display: "flex", alignItems: "center", gap: 7, padding: "6px 8px", borderTop: `1px solid ${LINE}`, marginTop: 4 },
   // filter view
   fv: { maxWidth: 760 },
   fvHead: { display: "flex", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" },
@@ -165,6 +183,8 @@ export const CSS = `
 * { box-sizing: border-box; }
 body { margin: 0; }
 .card:hover { border-color: #41506b !important; transform: translateY(-1px); }
+.pop-item:hover { background: #243044; }
+.swipe-snap { transition: transform .18s ease; }
 .blink { animation: blink 1.2s infinite; }
 @keyframes blink { 0%,100%{opacity:.4} 50%{opacity:1} }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
