@@ -140,6 +140,9 @@ export const S = {
   memberName: { flex: 1, background: "transparent", border: "none", color: INK, font: "inherit", fontSize: 14, fontWeight: 600, outline: "none" },
   memberCount: { fontSize: 11, color: MUTED, fontFamily: "'JetBrains Mono',monospace" },
   swatch: { width: 22, height: 22, borderRadius: "50%", flexShrink: 0, cursor: "pointer", border: "2px solid rgba(255,255,255,.15)" },
+  ctrlToggle: { font: "inherit", fontSize: 11, fontWeight: 700, color: MUTED, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 20, padding: "4px 10px", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 },
+  ctrlToggleOn: { color: "#0D1117", background: GOLD, borderColor: GOLD },
+  dateInput: { width: "100%", background: "transparent", border: "none", color: INK, font: "inherit", fontSize: 14, fontWeight: 600, outline: "none", colorScheme: "dark" },
   addMemberRow: { display: "flex", gap: 8, marginTop: 12 },
   // audit log
   logRow: { display: "flex", gap: 10, padding: "9px 0", borderBottom: `1px solid ${LINE}`, fontSize: 12.5 },
@@ -167,6 +170,8 @@ body { margin: 0; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #283041; border-radius: 8px; }
 select option { background: #1B2230; }
+input[type=date] { color-scheme: dark; }
+input[type=date]::-webkit-calendar-picker-indicator { filter: invert(.8); opacity: .7; cursor: pointer; }
 input::placeholder, textarea::placeholder { color: #5A6373; }
 
 @media (max-width: 820px) {

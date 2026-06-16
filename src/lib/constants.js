@@ -37,12 +37,13 @@ export const MEMBER_PALETTE = [
 ];
 
 // Default project members (seed). Editable in-app via the Members screen.
+// `isController` marks members who can be assigned as a task controller (בקר).
 export const DEFAULT_MEMBERS = [
-  { id: "m1", name: "דימה", color: "#E8B84B" },
-  { id: "m2", name: "אלון", color: "#58A6FF" },
-  { id: "m3", name: "ליאב", color: "#3FB950" },
-  { id: "m4", name: "אמיתי", color: "#F778BA" },
-  { id: "m5", name: "אופק", color: "#BC8CFF" },
+  { id: "m1", name: "דימה", color: "#E8B84B", isController: true },
+  { id: "m2", name: "אלון", color: "#58A6FF", isController: false },
+  { id: "m3", name: "ליאב", color: "#3FB950", isController: false },
+  { id: "m4", name: "אמיתי", color: "#F778BA", isController: false },
+  { id: "m5", name: "אופק", color: "#BC8CFF", isController: false },
 ];
 
 export const SEED = [
@@ -76,6 +77,26 @@ export function readable(hex) {
 // Initials for an avatar bubble (first 2 chars works well for Hebrew names).
 export function initials(name) {
   return (name || "?").trim().slice(0, 2);
+}
+
+// ----- due-date helpers -----
+// Tasks store dates as "D.M.YY" (e.g. "22.6.26"). These convert to/from the
+// ISO "YYYY-MM-DD" that <input type="date"> needs for the calendar picker.
+export function dueToISO(due) {
+  if (!due) return "";
+  const m = String(due).match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  if (!m) return "";
+  let [, d, mo, y] = m;
+  y = +y < 100 ? 2000 + +y : +y;
+  return `${y}-${String(+mo).padStart(2, "0")}-${String(+d).padStart(2, "0")}`;
+}
+
+export function isoToDue(iso) {
+  if (!iso) return "";
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "";
+  const [, y, mo, d] = m;
+  return `${+d}.${+mo}.${String(+y).slice(2)}`;
 }
 
 // Deterministic color for a free-text tag, so the same label always looks the same.
