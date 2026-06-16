@@ -5,7 +5,7 @@ export const BG = "#0B0E14", PANEL = "#141A24", PANEL2 = "#1B2230",
 export const S = {
   boot: { background: BG, color: GOLD, minHeight: "100vh", display: "grid", placeItems: "center", fontFamily: "system-ui", fontSize: 16 },
   app: { background: `radial-gradient(900px 500px at 85% -10%, rgba(88,166,255,.06), transparent), ${BG}`, color: INK, minHeight: "100vh", fontFamily: "'Heebo',system-ui,sans-serif", display: "flex", flexDirection: "column" },
-  head: { borderBottom: `1px solid ${LINE}`, padding: "8px 12px", background: "rgba(13,17,23,.6)", backdropFilter: "blur(6px)", position: "sticky", top: 0, zIndex: 10 },
+  head: { borderBottom: `1px solid ${LINE}`, padding: "calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 12px) 8px calc(env(safe-area-inset-left) + 12px)", background: "rgba(13,17,23,.6)", backdropFilter: "blur(6px)", position: "sticky", top: 0, zIndex: 10 },
   titleRow: { display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" },
   crest: { width: 28, height: 28, borderRadius: 8, display: "grid", placeItems: "center", color: GOLD, fontSize: 13, background: "linear-gradient(145deg,#1C2230,#0D1117)", border: `1px solid ${LINE}`, boxShadow: "inset 0 0 0 1px rgba(232,184,75,.15)", flexShrink: 0 },
   h1: { fontSize: 15, fontWeight: 800, margin: 0, letterSpacing: "-.3px", lineHeight: 1.1 },
@@ -94,7 +94,7 @@ export const S = {
   qTask: { fontSize: 13.5, fontWeight: 600, flex: 1 },
   qDue: { fontSize: 11, color: MUTED, fontFamily: "'JetBrains Mono',monospace" },
   // FAB
-  fab: { position: "fixed", insetInlineEnd: 16, bottom: 16, zIndex: 40, display: "flex", alignItems: "center", gap: 9, background: "linear-gradient(145deg,#2A2A12,#141A24)", color: GOLD, border: `1px solid ${GOLD}66`, borderRadius: 30, padding: "13px 20px", cursor: "pointer", font: "inherit", fontSize: 14, fontWeight: 800, boxShadow: "0 8px 28px rgba(0,0,0,.5), 0 0 0 1px rgba(232,184,75,.12) inset" },
+  fab: { position: "fixed", insetInlineEnd: "calc(env(safe-area-inset-right) + 16px)", bottom: "calc(env(safe-area-inset-bottom) + 16px)", zIndex: 40, display: "flex", alignItems: "center", gap: 9, background: "linear-gradient(145deg,#2A2A12,#141A24)", color: GOLD, border: `1px solid ${GOLD}66`, borderRadius: 30, padding: "13px 20px", cursor: "pointer", font: "inherit", fontSize: 14, fontWeight: 800, boxShadow: "0 8px 28px rgba(0,0,0,.5), 0 0 0 1px rgba(232,184,75,.12) inset" },
   fabPlus: { fontSize: 18, lineHeight: 1 },
   // modal
   scrim: { position: "fixed", inset: 0, background: "rgba(5,8,12,.72)", backdropFilter: "blur(3px)", display: "grid", placeItems: "center", padding: 20, zIndex: 50, overflow: "auto" },
@@ -191,7 +191,6 @@ export const S = {
 };
 
 export const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;600;800&family=JetBrains+Mono:wght@500&display=swap');
 * { box-sizing: border-box; }
 body { margin: 0; }
 .card:hover { border-color: #41506b !important; transform: translateY(-1px); }
