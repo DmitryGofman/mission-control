@@ -46,6 +46,7 @@ export default function App() {
   const [editingProc, setEditingProc] = useState(undefined);
   const [showMembers, setShowMembers] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  const [showPanel, setShowPanel] = useState(false);
   const importRef = useRef(null);
 
   // ---------- load / persist ----------
@@ -155,6 +156,68 @@ export default function App() {
     reader.readAsText(file);
   }
 
+  // ---------- development summary document ----------
+  function exportDevSummary() {
+    const done = tasks.filter((t) => t.status === "בוצע");
+    const esc = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const today = new Date().toLocaleDateString("he-IL", { day: "2-digit", month: "long", year: "numeric" });
+
+    // Group completed tasks by assembly.
+    const byAsm = {};
+    for (const t of done) (byAsm[t.asm] ||= []).push(t);
+
+    const summaryChips = STATUS_ORDER.map((s) =>
+      `<span class="chip"><b style="color:${STATUSES[s].color}">${counts[s]}</b> ${esc(s)}</span>`).join("");
+
+    const sections = Object.keys(byAsm).length
+      ? Object.entries(byAsm).map(([asm, items]) => `
+        <h3><span class="asm" style="background:${ASSEMBLIES[asm] || "#5A6573"};color:${readable(ASSEMBLIES[asm] || "#5A6573")}">${esc(asm)}</span> <span class="muted">(${items.length})</span></h3>
+        ${items.map((t) => {
+          const chk = t.checklist?.length ? ` · תת-משימות: ${t.checklist.filter((c) => c.done).length}/${t.checklist.length}` : "";
+          const tags = t.tags?.length ? `<div class="tags">${t.tags.map((x) => `<span class="tag">${esc(x)}</span>`).join("")}</div>` : "";
+          return `<div class="task">
+            <div class="ttl">${esc(t.task)}</div>
+            <div class="meta">מבצע: <b>${esc(t.who || "—")}</b>${t.ctrl ? ` · בקר: ${esc(t.ctrl)}` : ""}${t.due ? ` · תג״ב: ${esc(t.due)}` : ""}${chk}</div>
+            ${t.notes ? `<div class="notes">${esc(t.notes)}</div>` : ""}
+            ${tags}
+          </div>`;
+        }).join("")}`).join("")
+      : `<p class="muted">עדיין לא הושלמו משימות.</p>`;
+
+    const html = `<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8">
+<title>סיכום פיתוח — מרכז בקרת משימות</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;800&display=swap');
+  body{font-family:'Heebo',system-ui,sans-serif;max-width:820px;margin:40px auto;padding:0 20px;color:#1a1f29;line-height:1.55}
+  h1{font-size:26px;margin:0 0 4px} h2{font-size:18px;margin:28px 0 12px;border-bottom:2px solid #eee;padding-bottom:6px}
+  h3{font-size:15px;margin:22px 0 8px;display:flex;align-items:center;gap:8px}
+  .meta-top{color:#6b7686;font-size:13px;margin-bottom:18px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  .chip{border:1px solid #e3e7ee;border-radius:20px;padding:4px 12px;font-size:13px}
+  .asm{font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px}
+  .task{border:1px solid #e8ebf1;border-radius:10px;padding:11px 13px;margin-bottom:9px}
+  .ttl{font-weight:600;font-size:14.5px} .meta{color:#5a6473;font-size:12.5px;margin-top:3px}
+  .notes{font-size:12.5px;color:#3b4351;margin-top:6px;white-space:pre-wrap}
+  .tags{margin-top:7px;display:flex;flex-wrap:wrap;gap:5px}
+  .tag{font-size:11px;background:#eef1f6;border-radius:20px;padding:1px 8px;color:#4a5365}
+  .muted{color:#8b97a8} @media print{body{margin:0}}
+</style></head><body>
+  <h1>סיכום פיתוח — מרכז בקרת משימות</h1>
+  <div class="meta-top">הופק בתאריך ${today} · ${done.length} משימות הושלמו מתוך ${tasks.length}</div>
+  <div class="chips">${summaryChips}</div>
+  <h2>משימות שהושלמו</h2>
+  ${sections}
+  <p class="muted" style="margin-top:30px;font-size:12px">להמרה ל-PDF: פתחו את הקובץ בדפדפן והדפיסו (Ctrl/Cmd+P) → שמירה כ-PDF.</p>
+</body></html>`;
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `סיכום-פיתוח-${new Date().toISOString().slice(0, 10)}.html`;
+    a.click(); URL.revokeObjectURL(url);
+    record("הופק סיכום פיתוח", `${done.length} משימות שהושלמו`);
+  }
+
   // ---------- derived ----------
   const counts = useMemo(
     () => STATUS_ORDER.reduce((a, s) => ((a[s] = tasks.filter((t) => t.status === s).length), a), {}),
@@ -204,16 +267,21 @@ export default function App() {
             <input style={S.search} value={query} placeholder="חיפוש…"
               onChange={(e) => setQuery(e.target.value)} />
             <button style={S.ghostBtn} onClick={() => setShowMembers(true)}>👥 צוות</button>
-            <button style={S.ghostBtn} onClick={() => setShowLog(true)}>🕘 יומן</button>
-            <button style={S.ghostBtn} onClick={exportBackup} title="ייצוא גיבוי">⬇️</button>
-            <button style={S.ghostBtn} onClick={() => importRef.current?.click()} title="ייבוא גיבוי">⬆️</button>
+            <button style={S.iconBtn} onClick={() => setShowPanel(true)} aria-label="סיכום ואפשרויות" title="סיכום ואפשרויות">⋮</button>
             <input ref={importRef} type="file" accept="application/json" hidden
               onChange={(e) => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ""; }} />
           </div>
         </div>
-        <div style={S.kpis} className="mc-kpis">
-          <Kpi n={tasks.length} label="סה״כ" color={GOLD} />
-          {STATUS_ORDER.map((s) => <Kpi key={s} n={counts[s]} label={s} color={STATUSES[s].color} />)}
+        <div style={S.summaryBar}>
+          <span style={{ ...S.sumChip, borderColor: GOLD + "66" }}>
+            <span style={{ ...S.sumN, color: GOLD }}>{tasks.length}</span> סה״כ
+          </span>
+          {STATUS_ORDER.map((s) => (
+            <span key={s} style={S.sumChip}>
+              <span style={{ ...S.sumDot, background: STATUSES[s].color }} />
+              <span style={{ ...S.sumN, color: STATUSES[s].color }}>{counts[s]}</span> {s}
+            </span>
+          ))}
         </div>
       </header>
 
@@ -275,17 +343,71 @@ export default function App() {
           onChange={changeMembers} onClose={() => setShowMembers(false)} />
       )}
       {showLog && <AuditDrawer log={log} onClear={() => setLog([])} onClose={() => setShowLog(false)} />}
+      {showPanel && (
+        <SidePanel
+          counts={counts} total={tasks.length} members={members.length}
+          onDevSummary={exportDevSummary}
+          onOpenLog={() => { setShowPanel(false); setShowLog(true); }}
+          onExport={exportBackup}
+          onImport={() => importRef.current?.click()}
+          onClose={() => setShowPanel(false)} />
+      )}
     </div>
   );
 }
 
 // ============================== sub-components ==============================
-function Kpi({ n, label, color }) {
+function SidePanel({ counts, total, members, onDevSummary, onOpenLog, onExport, onImport, onClose }) {
+  useEscape(onClose);
   return (
-    <div style={{ ...S.kpi, borderColor: color }}>
-      <div style={{ ...S.kpiN, color }}>{n}</div>
-      <div style={S.kpiL}>{label}</div>
-    </div>
+    <>
+      <div style={S.drawerScrim} onClick={onClose} />
+      <aside style={S.drawer}>
+        <div style={S.railHead}>
+          סיכום ואפשרויות
+          <button style={S.drawerClose} onClick={onClose} aria-label="סגור">×</button>
+        </div>
+
+        <div style={S.panelSection}>
+          <div style={S.panelTitle}>סיכום משימות</div>
+          <div style={S.sumRow}>
+            <span style={{ ...S.sumDot, background: GOLD }} /> סה״כ
+            <span style={{ ...S.sumRowN, color: GOLD }}>{total}</span>
+          </div>
+          {STATUS_ORDER.map((s) => (
+            <div key={s} style={S.sumRow}>
+              <span style={{ ...S.sumDot, background: STATUSES[s].color }} /> {s}
+              <span style={{ ...S.sumRowN, color: STATUSES[s].color }}>{counts[s]}</span>
+            </div>
+          ))}
+          <div style={{ ...S.sumRow, color: MUTED, fontSize: 12 }}>חברי צוות<span style={{ ...S.sumRowN, color: MUTED, fontSize: 13 }}>{members}</span></div>
+        </div>
+
+        <div style={S.panelSection}>
+          <div style={S.panelTitle}>כלים</div>
+          <button style={S.panelBtn} onClick={onDevSummary}>
+            <span style={S.panelBtnIcon}>📄</span>
+            <span>ייצוא סיכום פיתוח<div style={S.panelBtnSub}>מסמך של כל המשימות שהושלמו</div></span>
+          </button>
+          <button style={S.panelBtn} onClick={onOpenLog}>
+            <span style={S.panelBtnIcon}>🕘</span>
+            <span>יומן פעילות<div style={S.panelBtnSub}>היסטוריית שינויים</div></span>
+          </button>
+          <button style={S.panelBtn} onClick={onExport}>
+            <span style={S.panelBtnIcon}>⬇️</span>
+            <span>ייצוא גיבוי (JSON)<div style={S.panelBtnSub}>שמירת כל הנתונים לקובץ</div></span>
+          </button>
+          <button style={S.panelBtn} onClick={onImport}>
+            <span style={S.panelBtnIcon}>⬆️</span>
+            <span>ייבוא גיבוי (JSON)<div style={S.panelBtnSub}>שחזור מקובץ גיבוי</div></span>
+          </button>
+        </div>
+
+        <div style={S.panelSection}>
+          <div style={S.panelHint}>אפשרויות נוספות יתווספו כאן בהמשך — דוחות, סינונים שמורים, הגדרות פרויקט ועוד.</div>
+        </div>
+      </aside>
+    </>
   );
 }
 
