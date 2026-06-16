@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { S, MUTED, GOLD } from "../lib/styles.js";
 import {
   STATUSES, ASSEMBLIES, PRIORITIES, readable, initials,
-  dueToDate, dateToDue, dueToISO, isoToDue, startOfToday, addDays,
+  dueToDate, dateToDue, startOfToday, addDays,
 } from "../lib/constants.js";
 
 // ----- date grouping (Todoist-style buckets) -----
@@ -37,7 +37,7 @@ function SwipeRow({ onComplete, onPostpone, onClick, children }) {
   const [dragging, setDragging] = useState(false);
   const startX = useRef(null);
   const moved = useRef(false);
-  const THRESH = 80;
+  const THRESH = 95;
   const MAX = 130;
 
   function down(e) {
@@ -87,33 +87,66 @@ function SwipeRow({ onComplete, onPostpone, onClick, children }) {
   );
 }
 
-// Quick reschedule popover (Today / Tomorrow / Weekend / Next week / pick / none).
-// Rendered via a portal with fixed positioning so it isn't clipped by the
-// swipe container's overflow or the row's transform.
+// Inline month calendar (no native picker, so it can't be dismissed early).
+const DOW = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
+function InlineCalendar({ onPick }) {
+  const t = startOfToday();
+  const [view, setView] = useState({ y: t.getFullYear(), m: t.getMonth() });
+  const first = new Date(view.y, view.m, 1);
+  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < first.getDay(); i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  const prev = () => setView((v) => (v.m === 0 ? { y: v.y - 1, m: 11 } : { y: v.y, m: v.m - 1 }));
+  const next = () => setView((v) => (v.m === 11 ? { y: v.y + 1, m: 0 } : { y: v.y, m: v.m + 1 }));
+  const isToday = (d) => view.y === t.getFullYear() && view.m === t.getMonth() && d === t.getDate();
+
+  return (
+    <div style={S.calWrap}>
+      <div style={S.calHead}>
+        <button style={S.calNav} onClick={prev} aria-label="חודש קודם">›</button>
+        <span>{first.toLocaleDateString("he-IL", { month: "long", year: "numeric" })}</span>
+        <button style={S.calNav} onClick={next} aria-label="חודש הבא">‹</button>
+      </div>
+      <div style={S.calGrid}>
+        {DOW.map((d) => <span key={d} style={S.calDow}>{d}</span>)}
+        {cells.map((d, i) => d
+          ? <button key={i} className="cal-day" style={{ ...S.calDay, ...(isToday(d) ? S.calToday : {}) }}
+              onClick={() => onPick(dateToDue(new Date(view.y, view.m, d)))}>{d}</button>
+          : <span key={i} />)}
+      </div>
+    </div>
+  );
+}
+
+// Quick reschedule popover (Today / Tomorrow / Weekend / In a week / no date /
+// pick a date). Rendered via a portal with fixed positioning so it isn't
+// clipped by the swipe container's overflow or the row's transform.
 function Reschedule({ anchor, onPick, onClose }) {
+  const [showCal, setShowCal] = useState(false);
   const today = startOfToday();
-  const tomorrow = addDays(today, 1);
   const dToSat = (6 - today.getDay() + 7) % 7;
   const saturday = addDays(today, dToSat === 0 ? 7 : dToSat);
-  const dToSun = (7 - today.getDay()) % 7;
-  const nextSunday = addDays(today, dToSun === 0 ? 7 : dToSun);
 
   const opts = [
     { label: "היום", icon: "📌", date: today },
-    { label: "מחר", icon: "☀️", date: tomorrow },
+    { label: "מחר", icon: "☀️", date: addDays(today, 1) },
     { label: "סוף שבוע", icon: "🛋️", date: saturday },
-    { label: "שבוע הבא", icon: "📆", date: nextSunday },
+    { label: "בעוד שבוע", icon: "📆", date: addDays(today, 7) },
     { label: "ללא תאריך", icon: "🚫", date: null },
   ];
 
-  const W = 210;
+  const W = 230;
+  const H = showCal ? 380 : 270;
   const left = Math.max(8, Math.min(anchor.right - W, window.innerWidth - W - 8));
-  const top = Math.min(anchor.bottom + 6, window.innerHeight - 320);
+  const top = window.innerHeight - anchor.bottom > H + 12
+    ? anchor.bottom + 6
+    : Math.max(8, anchor.top - H - 6);
 
   return createPortal(
     <>
       <div style={S.popScrim} onClick={onClose} />
-      <div style={{ ...S.popoverFixed, left, top }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...S.popoverFixed, width: W, left, top }} onClick={(e) => e.stopPropagation()}>
         <div style={S.popTitle}>תזמון מחדש</div>
         {opts.map((o) => (
           <button key={o.label} className="pop-item" style={S.popItem}
@@ -122,11 +155,11 @@ function Reschedule({ anchor, onPick, onClose }) {
             {o.date && <span style={S.popItemDate}>{dateToDue(o.date)}</span>}
           </button>
         ))}
-        <div style={S.popDateRow}>
-          <span style={{ fontSize: 13 }}>🗓️ בחר תאריך</span>
-          <input type="date" style={{ ...S.dateInput, fontSize: 12 }}
-            onChange={(e) => { if (e.target.value) { onPick(isoToDue(e.target.value)); onClose(); } }} />
-        </div>
+        {!showCal
+          ? <button className="pop-item" style={S.popItem} onClick={() => setShowCal(true)}>
+              <span>🗓️</span>בחר תאריך…
+            </button>
+          : <InlineCalendar onPick={(due) => { onPick(due); onClose(); }} />}
       </div>
     </>,
     document.body
