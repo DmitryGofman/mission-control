@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   STATUSES, STATUS_ORDER, ASSEMBLIES, PRIORITIES, SEED, DEFAULT_MEMBERS,
-  PROC_STATUSES, PROC_STATUS_ORDER, PROC_SEED, STORE, readable, initials,
+  PROC_STATUSES, PROC_STATUS_ORDER, PROC_SEED, STORE, readable, initials, tagColor,
 } from "./lib/constants.js";
 import { loadJSON, saveJSON } from "./lib/storage.js";
+import { useEscape } from "./lib/useEscape.js";
 import { S, CSS, MUTED, GOLD } from "./lib/styles.js";
 import TaskModal from "./components/TaskModal.jsx";
 import MembersModal from "./components/MembersModal.jsx";
@@ -12,8 +13,10 @@ import ProcurementModal from "./components/ProcurementModal.jsx";
 // Human-readable labels for audit diffs.
 const FIELD_LABELS = {
   task: "שם", asm: "מכלול", pri: "עדיפות", status: "סטטוס",
-  who: "מבצע", ctrl: "בקר", due: "תג״ב", notes: "הערות", attachments: "קבצים",
+  who: "מבצע", ctrl: "בקר", due: "תג״ב", notes: "הערות",
+  attachments: "קבצים", checklist: "תת-משימות", tags: "תוויות", comments: "תגובות",
 };
+const ARRAY_FIELDS = new Set(["attachments", "checklist", "tags", "comments"]);
 
 // Is a "DD.M.YY" due date in the past?
 function isOverdue(due) {
@@ -49,7 +52,7 @@ export default function App() {
   useEffect(() => {
     const t = loadJSON(STORE.tasks, SEED);
     const m = loadJSON(STORE.members, DEFAULT_MEMBERS);
-    setTasks(t.map((x) => ({ attachments: [], comments: [], ...x })));
+    setTasks(t.map((x) => ({ attachments: [], comments: [], checklist: [], tags: [], ...x })));
     setMembers(m);
     setProc(loadJSON(STORE.procurement, PROC_SEED));
     setLog(loadJSON(STORE.audit, []));
@@ -78,8 +81,8 @@ export default function App() {
       const before = tasks.find((t) => t.id === draft.id);
       const changes = [];
       for (const k of Object.keys(FIELD_LABELS)) {
-        if (k === "attachments") {
-          const a0 = before?.attachments?.length || 0, a1 = draft.attachments?.length || 0;
+        if (ARRAY_FIELDS.has(k)) {
+          const a0 = before?.[k]?.length || 0, a1 = draft[k]?.length || 0;
           if (a0 !== a1) changes.push(`${FIELD_LABELS[k]}: ${a0}→${a1}`);
         } else if ((before?.[k] || "") !== (draft[k] || "")) {
           changes.push(`${FIELD_LABELS[k]}: "${before?.[k] || "—"}"→"${draft[k] || "—"}"`);
@@ -141,7 +144,7 @@ export default function App() {
     reader.onload = () => {
       try {
         const data = JSON.parse(reader.result);
-        if (Array.isArray(data.tasks)) setTasks(data.tasks.map((x) => ({ attachments: [], comments: [], ...x })));
+        if (Array.isArray(data.tasks)) setTasks(data.tasks.map((x) => ({ attachments: [], comments: [], checklist: [], tags: [], ...x })));
         if (Array.isArray(data.members)) setMembers(data.members);
         if (Array.isArray(data.proc)) setProc(data.proc);
         if (Array.isArray(data.log)) setLog(data.log);
@@ -167,8 +170,13 @@ export default function App() {
     const q = query.trim().toLowerCase();
     if (!q) return tasks;
     return tasks.filter((t) =>
-      [t.task, t.notes, t.who, t.ctrl, t.asm].some((v) => (v || "").toLowerCase().includes(q)));
+      [t.task, t.notes, t.who, t.ctrl, t.asm, ...(t.tags || [])].some((v) => (v || "").toLowerCase().includes(q)));
   }, [tasks, query]);
+
+  const tagSuggestions = useMemo(
+    () => [...new Set(tasks.flatMap((t) => t.tags || []))].sort(),
+    [tasks]
+  );
 
   const memberNames = members.map((m) => m.name);
 
@@ -255,7 +263,7 @@ export default function App() {
 
       {/* modals */}
       {editing !== undefined && (
-        <TaskModal task={editing} members={members}
+        <TaskModal task={editing} members={members} tagSuggestions={tagSuggestions}
           onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(undefined)} />
       )}
       {editingProc !== undefined && (
@@ -287,15 +295,26 @@ function memberColor(members, name) {
 
 function Card({ t, members, onClick }) {
   const att = t.attachments?.length || 0;
+  const checks = t.checklist?.length || 0;
+  const checksDone = (t.checklist || []).filter((c) => c.done).length;
   const overdue = isOverdue(t.due) && t.status !== "בוצע";
   return (
     <div style={S.card} onClick={onClick} className="card">
       <span style={{ ...S.pri, color: PRIORITIES[t.pri], borderColor: PRIORITIES[t.pri] + "55" }}>{t.pri}</span>
       <div style={S.cardTask}>{t.task}</div>
+      {!!(t.tags?.length) && (
+        <div style={{ ...S.tagChips, marginBottom: 8 }}>
+          {t.tags.map((tag) => {
+            const c = tagColor(tag);
+            return <span key={tag} style={{ ...S.cardTag, color: c, borderColor: c + "66", background: c + "1a" }}>{tag}</span>;
+          })}
+        </div>
+      )}
       <div style={S.cardMeta}>
         <span style={{ ...S.asmPill, background: ASSEMBLIES[t.asm], color: readable(ASSEMBLIES[t.asm]) }}>{t.asm}</span>
         <span style={{ ...S.ava, background: memberColor(members, t.who) }}>{initials(t.who)}</span>
         <span style={S.who}>{t.who}</span>
+        {checks > 0 && <span style={S.clip}>✓ {checksDone}/{checks}</span>}
         {att > 0 && <span style={S.clip}>📎 {att}</span>}
         {(t.comments?.length || 0) > 0 && <span style={S.clip}>💬 {t.comments.length}</span>}
         {t.due && <span style={{ ...S.due, ...(overdue ? S.overdue : {}) }}>{t.due}</span>}
@@ -371,6 +390,7 @@ function ProcurementView({ rows, query, onPick }) {
 }
 
 function AuditDrawer({ log, onClear, onClose }) {
+  useEscape(onClose);
   return (
     <>
       <div style={S.drawerScrim} onClick={onClose} />

@@ -81,6 +81,22 @@ export const S = {
   fileName: { fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   fileSize: { fontSize: 10.5, color: MUTED, marginInlineStart: "auto", fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 },
   fileX: { background: "none", border: "none", color: MUTED, fontSize: 18, cursor: "pointer", lineHeight: 1, flexShrink: 0 },
+  // checklist
+  checklistWrap: { background: PANEL2, border: `1px solid ${LINE}`, borderRadius: 10, padding: 11, marginBottom: 14 },
+  checkBar: { height: 4, borderRadius: 4, background: LINE, overflow: "hidden", margin: "6px 0 10px" },
+  checkBarFill: { height: "100%", background: "#3FB950", transition: "width .2s" },
+  checkItem: { display: "flex", alignItems: "center", gap: 9, padding: "5px 0" },
+  checkBox: { width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${MUTED}`, display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0, fontSize: 12, fontWeight: 800 },
+  checkBoxOn: { background: "#3FB950", borderColor: "#3FB950", color: "#0D1117" },
+  checkText: { flex: 1, fontSize: 13, color: INK },
+  checkTextDone: { textDecoration: "line-through", color: MUTED },
+  checkInput: { flex: 1, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 9, padding: "8px 11px", color: INK, font: "inherit", fontSize: 13, outline: "none" },
+  // tags
+  tagsWrap: { background: PANEL2, border: `1px solid ${LINE}`, borderRadius: 10, padding: 11, marginBottom: 14 },
+  tagChips: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 },
+  tag: { display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, padding: "3px 9px", borderRadius: 20, border: "1px solid" },
+  tagX: { background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0, opacity: .8 },
+  cardTag: { fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 20, border: "1px solid" },
   // comments
   commentsWrap: { background: PANEL2, border: `1px solid ${LINE}`, borderRadius: 10, padding: 11, marginBottom: 14 },
   comment: { display: "flex", gap: 9, marginBottom: 9 },

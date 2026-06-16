@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { S, MUTED } from "../lib/styles.js";
 import { MEMBER_PALETTE, initials } from "../lib/constants.js";
+import { useEscape } from "../lib/useEscape.js";
 
 const uid = () => "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
@@ -8,6 +9,7 @@ const uid = () => "m_" + Date.now().toString(36) + Math.random().toString(36).sl
 // `taskCounts` maps member name -> number of tasks assigned (for safety on delete).
 export default function MembersModal({ members, taskCounts, onChange, onClose }) {
   const [newName, setNewName] = useState("");
+  useEscape(onClose);
 
   function add() {
     const name = newName.trim();

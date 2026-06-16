@@ -77,3 +77,10 @@ export function readable(hex) {
 export function initials(name) {
   return (name || "?").trim().slice(0, 2);
 }
+
+// Deterministic color for a free-text tag, so the same label always looks the same.
+export function tagColor(label) {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) % 360;
+  return `hsl(${h} 60% 62%)`;
+}

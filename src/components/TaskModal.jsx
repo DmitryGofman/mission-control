@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { S } from "../lib/styles.js";
-import { STATUSES, ASSEMBLIES, PRIORITIES, STATUS_ORDER, readable, initials } from "../lib/constants.js";
+import { STATUSES, ASSEMBLIES, PRIORITIES, STATUS_ORDER, readable, initials, tagColor } from "../lib/constants.js";
+import { useEscape } from "../lib/useEscape.js";
 import Attachments from "./Attachments.jsx";
 
 function Field({ label, children }) {
@@ -18,10 +19,80 @@ function Select({ value, options, onChange, color }) {
 
 const blankTask = () => ({
   asm: Object.keys(ASSEMBLIES)[0], task: "", pri: "בינוני",
-  status: "בעבודה", who: "", ctrl: "", due: "", notes: "", attachments: [], comments: [],
+  status: "בעבודה", who: "", ctrl: "", due: "", notes: "",
+  attachments: [], comments: [], checklist: [], tags: [],
 });
 
 const uid = () => "c_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+
+function Checklist({ items, onChange }) {
+  const [text, setText] = useState("");
+  const done = items.filter((i) => i.done).length;
+  const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+  const toggle = (id) => onChange(items.map((i) => (i.id === id ? { ...i, done: !i.done } : i)));
+
+  function add() {
+    const t = text.trim();
+    if (!t) return;
+    onChange([...items, { id: uid(), text: t, done: false }]);
+    setText("");
+  }
+
+  return (
+    <div style={S.checklistWrap}>
+      <label style={S.fieldLabel}>תת-משימות {items.length ? `(${done}/${items.length})` : ""}</label>
+      {!!items.length && <div style={S.checkBar}><div style={{ ...S.checkBarFill, width: `${pct}%` }} /></div>}
+      {items.map((i) => (
+        <div key={i.id} style={S.checkItem}>
+          <span style={{ ...S.checkBox, ...(i.done ? S.checkBoxOn : {}) }} onClick={() => toggle(i.id)}>{i.done ? "✓" : ""}</span>
+          <span style={{ ...S.checkText, ...(i.done ? S.checkTextDone : {}) }}>{i.text}</span>
+          <button type="button" style={S.commentX} onClick={() => onChange(items.filter((x) => x.id !== i.id))} aria-label="מחק">×</button>
+        </div>
+      ))}
+      <div style={{ ...S.commentInputRow, marginTop: 8 }}>
+        <input style={S.checkInput} value={text} placeholder="הוסף תת-משימה…"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
+        <button type="button" style={{ ...S.attachBtn, padding: "0 14px" }} onClick={add}>הוסף</button>
+      </div>
+    </div>
+  );
+}
+
+function Tags({ tags, suggestions, onChange }) {
+  const [text, setText] = useState("");
+  function add() {
+    const t = text.trim();
+    if (!t || tags.includes(t)) { setText(""); return; }
+    onChange([...tags, t]);
+    setText("");
+  }
+  return (
+    <div style={S.tagsWrap}>
+      <label style={S.fieldLabel}>תוויות</label>
+      {!!tags.length && (
+        <div style={{ ...S.tagChips, marginTop: 8 }}>
+          {tags.map((t) => {
+            const c = tagColor(t);
+            return (
+              <span key={t} style={{ ...S.tag, color: c, borderColor: c + "66", background: c + "1a" }}>
+                {t}
+                <button type="button" style={S.tagX} onClick={() => onChange(tags.filter((x) => x !== t))} aria-label="הסר">×</button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ ...S.commentInputRow, marginTop: 4 }}>
+        <input style={S.checkInput} value={text} placeholder="הוסף תווית (Enter)…" list="mc-tags"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
+        <datalist id="mc-tags">{suggestions.map((s) => <option key={s} value={s} />)}</datalist>
+        <button type="button" style={{ ...S.attachBtn, padding: "0 14px" }} onClick={add}>הוסף</button>
+      </div>
+    </div>
+  );
+}
 
 function CommentThread({ comments, members, onChange }) {
   const memberNames = members.map((m) => m.name);
@@ -66,11 +137,12 @@ function CommentThread({ comments, members, onChange }) {
 }
 
 // One component, two modes (SPEC §5): add mode when `task` is null.
-export default function TaskModal({ task, members, onSave, onDelete, onClose }) {
+export default function TaskModal({ task, members, tagSuggestions = [], onSave, onDelete, onClose }) {
   const isEdit = !!task;
   const [draft, setDraft] = useState(() => (task ? { ...task } : blankTask()));
   const [confirmDel, setConfirmDel] = useState(false);
   const set = (field, value) => setDraft((d) => ({ ...d, [field]: value }));
+  useEscape(onClose);
 
   const memberNames = members.map((m) => m.name);
   const whoOptions = memberNames.includes(draft.who) || !draft.who
@@ -121,6 +193,10 @@ export default function TaskModal({ task, members, onSave, onDelete, onClose }) 
           <textarea style={S.notes} value={draft.notes} rows={3}
             onChange={(e) => set("notes", e.target.value)} />
         </div>
+
+        <Tags tags={draft.tags || []} suggestions={tagSuggestions} onChange={(t) => set("tags", t)} />
+
+        <Checklist items={draft.checklist || []} onChange={(c) => set("checklist", c)} />
 
         <Attachments value={draft.attachments || []} onChange={(a) => set("attachments", a)} />
 

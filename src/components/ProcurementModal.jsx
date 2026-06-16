@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { S } from "../lib/styles.js";
 import { PROC_STATUSES, PROC_STATUS_ORDER, readable } from "../lib/constants.js";
+import { useEscape } from "../lib/useEscape.js";
 
 function Field({ label, children }) {
   return <div style={S.field}><label style={S.fieldLabel}>{label}</label>{children}</div>;
@@ -14,6 +15,7 @@ export default function ProcurementModal({ row, onSave, onDelete, onClose }) {
   const [draft, setDraft] = useState(() => (row ? { ...row } : blank()));
   const [confirmDel, setConfirmDel] = useState(false);
   const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
+  useEscape(onClose);
 
   function save() {
     if (!draft.item.trim()) { alert("יש להזין שם פריט."); return; }
