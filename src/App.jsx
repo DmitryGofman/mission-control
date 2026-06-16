@@ -156,66 +156,82 @@ export default function App() {
     reader.readAsText(file);
   }
 
-  // ---------- development summary document ----------
+  // ---------- status report document (for management) ----------
+  // A periodic, presentation-ready status doc covering ALL statuses:
+  // blockers (תקוע) first, then in-progress, in-review, completed.
   function exportDevSummary() {
-    const done = tasks.filter((t) => t.status === "בוצע");
     const esc = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
     const today = new Date().toLocaleDateString("he-IL", { day: "2-digit", month: "long", year: "numeric" });
+    const overdueCount = tasks.filter((t) => isOverdue(t.due) && t.status !== "בוצע").length;
 
-    // Group completed tasks by assembly.
-    const byAsm = {};
-    for (const t of done) (byAsm[t.asm] ||= []).push(t);
+    // Order sections for management readability: blockers → in-progress → review → done.
+    const REPORT_ORDER = ["תקוע", "בעבודה", "לבדיקה", "בוצע"];
+    const LABELS = { "תקוע": "תקועים / חוסמים", "בעבודה": "בעבודה כעת", "לבדיקה": "ממתינות לבדיקה", "בוצע": "הושלמו" };
 
-    const summaryChips = STATUS_ORDER.map((s) =>
-      `<span class="chip"><b style="color:${STATUSES[s].color}">${counts[s]}</b> ${esc(s)}</span>`).join("");
+    const taskRow = (t, status) => {
+      const overdue = isOverdue(t.due) && status !== "בוצע";
+      const chk = t.checklist?.length ? ` · תת-משימות: ${t.checklist.filter((c) => c.done).length}/${t.checklist.length}` : "";
+      const tags = t.tags?.length ? `<div class="tags">${t.tags.map((x) => `<span class="tag">${esc(x)}</span>`).join("")}</div>` : "";
+      const asmColor = ASSEMBLIES[t.asm] || "#5A6573";
+      return `<div class="task">
+        <div class="row1"><span class="asm" style="background:${asmColor};color:${readable(asmColor)}">${esc(t.asm)}</span><span class="ttl">${esc(t.task)}</span></div>
+        <div class="meta">מבצע: <b>${esc(t.who || "—")}</b>${t.ctrl ? ` · בקר: ${esc(t.ctrl)}` : ""}${t.due ? ` · תג״ב: <span class="${overdue ? "od" : ""}">${esc(t.due)}${overdue ? " ⚠" : ""}</span>` : ""}${chk}</div>
+        ${t.notes ? `<div class="notes">${esc(t.notes)}</div>` : ""}
+        ${tags}
+      </div>`;
+    };
 
-    const sections = Object.keys(byAsm).length
-      ? Object.entries(byAsm).map(([asm, items]) => `
-        <h3><span class="asm" style="background:${ASSEMBLIES[asm] || "#5A6573"};color:${readable(ASSEMBLIES[asm] || "#5A6573")}">${esc(asm)}</span> <span class="muted">(${items.length})</span></h3>
-        ${items.map((t) => {
-          const chk = t.checklist?.length ? ` · תת-משימות: ${t.checklist.filter((c) => c.done).length}/${t.checklist.length}` : "";
-          const tags = t.tags?.length ? `<div class="tags">${t.tags.map((x) => `<span class="tag">${esc(x)}</span>`).join("")}</div>` : "";
-          return `<div class="task">
-            <div class="ttl">${esc(t.task)}</div>
-            <div class="meta">מבצע: <b>${esc(t.who || "—")}</b>${t.ctrl ? ` · בקר: ${esc(t.ctrl)}` : ""}${t.due ? ` · תג״ב: ${esc(t.due)}` : ""}${chk}</div>
-            ${t.notes ? `<div class="notes">${esc(t.notes)}</div>` : ""}
-            ${tags}
-          </div>`;
-        }).join("")}`).join("")
-      : `<p class="muted">עדיין לא הושלמו משימות.</p>`;
+    const sections = REPORT_ORDER.map((status) => {
+      const items = tasks.filter((t) => t.status === status);
+      if (!items.length) return "";
+      const c = STATUSES[status].color;
+      return `<h2 class="status" style="border-color:${c}"><span class="sdot" style="background:${c}"></span>${esc(LABELS[status])} <span class="muted">(${items.length})</span></h2>
+        ${items.map((t) => taskRow(t, status)).join("")}`;
+    }).join("");
+
+    const summaryChips = `<span class="chip"><b>${tasks.length}</b> סה״כ</span>` +
+      STATUS_ORDER.map((s) => `<span class="chip"><b style="color:${STATUSES[s].color}">${counts[s]}</b> ${esc(s)}</span>`).join("");
+
+    const attention = (counts["תקוע"] || overdueCount)
+      ? `<div class="attn"><b>נקודות לתשומת לב:</b> ${counts["תקוע"] ? `${counts["תקוע"]} משימות תקועות/חוסמות` : ""}${counts["תקוע"] && overdueCount ? " · " : ""}${overdueCount ? `${overdueCount} משימות באיחור תג״ב` : ""}.</div>`
+      : "";
 
     const html = `<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8">
-<title>סיכום פיתוח — מרכז בקרת משימות</title>
+<title>דוח סטטוס פרויקט — מרכז בקרת משימות</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;800&display=swap');
-  body{font-family:'Heebo',system-ui,sans-serif;max-width:820px;margin:40px auto;padding:0 20px;color:#1a1f29;line-height:1.55}
-  h1{font-size:26px;margin:0 0 4px} h2{font-size:18px;margin:28px 0 12px;border-bottom:2px solid #eee;padding-bottom:6px}
-  h3{font-size:15px;margin:22px 0 8px;display:flex;align-items:center;gap:8px}
-  .meta-top{color:#6b7686;font-size:13px;margin-bottom:18px}
-  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+  body{font-family:'Heebo',system-ui,sans-serif;max-width:840px;margin:40px auto;padding:0 20px;color:#1a1f29;line-height:1.55}
+  h1{font-size:26px;margin:0 0 4px}
+  h2.status{font-size:17px;margin:26px 0 12px;display:flex;align-items:center;gap:9px;border-right:4px solid;padding:2px 10px 6px 0}
+  .sdot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .meta-top{color:#6b7686;font-size:13px;margin-bottom:14px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
   .chip{border:1px solid #e3e7ee;border-radius:20px;padding:4px 12px;font-size:13px}
-  .asm{font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px}
+  .attn{background:#fff5f5;border:1px solid #f3c9c9;border-radius:10px;padding:10px 13px;font-size:13px;color:#7a2e2e;margin:8px 0 4px}
+  .asm{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px;flex-shrink:0}
   .task{border:1px solid #e8ebf1;border-radius:10px;padding:11px 13px;margin-bottom:9px}
-  .ttl{font-weight:600;font-size:14.5px} .meta{color:#5a6473;font-size:12.5px;margin-top:3px}
-  .notes{font-size:12.5px;color:#3b4351;margin-top:6px;white-space:pre-wrap}
+  .row1{display:flex;align-items:center;gap:9px}
+  .ttl{font-weight:600;font-size:14.5px} .meta{color:#5a6473;font-size:12.5px;margin-top:5px}
+  .od{color:#c0392b;font-weight:700}
+  .notes{font-size:12.5px;color:#3b4351;margin-top:6px;white-space:pre-wrap;background:#f7f8fa;border-radius:7px;padding:7px 9px}
   .tags{margin-top:7px;display:flex;flex-wrap:wrap;gap:5px}
   .tag{font-size:11px;background:#eef1f6;border-radius:20px;padding:1px 8px;color:#4a5365}
-  .muted{color:#8b97a8} @media print{body{margin:0}}
+  .muted{color:#8b97a8} @media print{body{margin:0} .task{break-inside:avoid}}
 </style></head><body>
-  <h1>סיכום פיתוח — מרכז בקרת משימות</h1>
-  <div class="meta-top">הופק בתאריך ${today} · ${done.length} משימות הושלמו מתוך ${tasks.length}</div>
+  <h1>דוח סטטוס פרויקט</h1>
+  <div class="meta-top">מרכז בקרת משימות · הופק בתאריך ${today} · ${tasks.length} משימות · ${counts["בוצע"]} הושלמו</div>
   <div class="chips">${summaryChips}</div>
-  <h2>משימות שהושלמו</h2>
-  ${sections}
-  <p class="muted" style="margin-top:30px;font-size:12px">להמרה ל-PDF: פתחו את הקובץ בדפדפן והדפיסו (Ctrl/Cmd+P) → שמירה כ-PDF.</p>
+  ${attention}
+  ${sections || '<p class="muted">אין משימות.</p>'}
+  <p class="muted" style="margin-top:30px;font-size:12px">להמרה ל-PDF / מצגת: פתחו את הקובץ בדפדפן והדפיסו (Ctrl/Cmd+P) → שמירה כ-PDF.</p>
 </body></html>`;
 
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `סיכום-פיתוח-${new Date().toISOString().slice(0, 10)}.html`;
+    a.href = url; a.download = `דוח-סטטוס-${new Date().toISOString().slice(0, 10)}.html`;
     a.click(); URL.revokeObjectURL(url);
-    record("הופק סיכום פיתוח", `${done.length} משימות שהושלמו`);
+    record("הופק דוח סטטוס", `${tasks.length} משימות · ${counts["תקוע"]} תקועות`);
   }
 
   // ---------- derived ----------
@@ -387,7 +403,7 @@ function SidePanel({ counts, total, members, onDevSummary, onOpenLog, onExport, 
           <div style={S.panelTitle}>כלים</div>
           <button style={S.panelBtn} onClick={onDevSummary}>
             <span style={S.panelBtnIcon}>📄</span>
-            <span>ייצוא סיכום פיתוח<div style={S.panelBtnSub}>מסמך של כל המשימות שהושלמו</div></span>
+            <span>ייצוא דוח סטטוס<div style={S.panelBtnSub}>סטטוס מלא — תקועים, בעבודה והושלמו · להפקת מצגת</div></span>
           </button>
           <button style={S.panelBtn} onClick={onOpenLog}>
             <span style={S.panelBtnIcon}>🕘</span>
