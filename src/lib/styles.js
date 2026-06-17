@@ -97,8 +97,8 @@ export const S = {
   fab: { position: "fixed", insetInlineEnd: "calc(env(safe-area-inset-right) + 16px)", bottom: "calc(env(safe-area-inset-bottom) + 16px)", zIndex: 40, display: "flex", alignItems: "center", gap: 9, background: "linear-gradient(145deg,#2A2A12,#141A24)", color: GOLD, border: `1px solid ${GOLD}66`, borderRadius: 30, padding: "13px 20px", cursor: "pointer", font: "inherit", fontSize: 14, fontWeight: 800, boxShadow: "0 8px 28px rgba(0,0,0,.5), 0 0 0 1px rgba(232,184,75,.12) inset" },
   fabPlus: { fontSize: 18, lineHeight: 1 },
   // modal
-  scrim: { position: "fixed", inset: 0, background: "rgba(5,8,12,.72)", backdropFilter: "blur(3px)", display: "grid", placeItems: "center", padding: 20, zIndex: 50, overflow: "auto" },
-  modal: { background: PANEL, border: `1px solid ${LINE}`, borderRadius: 16, maxWidth: 560, width: "100%", padding: 22, position: "relative", boxShadow: "0 30px 80px rgba(0,0,0,.6)", margin: "auto", maxHeight: "92vh", overflow: "auto" },
+  scrim: { position: "fixed", inset: 0, background: "rgba(5,8,12,.72)", backdropFilter: "blur(3px)", display: "grid", placeItems: "center", padding: "calc(env(safe-area-inset-top) + 16px) calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px)", zIndex: 50, overflow: "auto" },
+  modal: { background: PANEL, border: `1px solid ${LINE}`, borderRadius: 16, maxWidth: 560, width: "100%", padding: 22, position: "relative", boxShadow: "0 30px 80px rgba(0,0,0,.6)", margin: "auto", maxHeight: "calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 32px)", overflow: "auto" },
   close: { position: "absolute", insetInlineEnd: 16, top: 14, background: "none", border: "none", color: MUTED, fontSize: 22, cursor: "pointer", lineHeight: 1 },
   asmTag: { display: "inline-block", fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, marginBottom: 8 },
   modalTitle: { fontSize: 18, margin: "0 0 16px", paddingInlineEnd: 28 },
@@ -182,11 +182,11 @@ export const S = {
   // drawer (reused for audit + members on mobile)
   drawerScrim: { position: "fixed", inset: 0, background: "rgba(5,8,12,.55)", backdropFilter: "blur(2px)", zIndex: 44 },
   drawer: { position: "fixed", insetInlineStart: 0, top: 0, bottom: 0, width: "min(440px,100vw)", background: PANEL, borderInlineEnd: `1px solid ${LINE}`, display: "flex", flexDirection: "column", minHeight: 0, zIndex: 45, boxShadow: "12px 0 40px rgba(0,0,0,.5)" },
-  railHead: { padding: "14px 16px", borderBottom: `1px solid ${LINE}`, fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 8 },
+  railHead: { padding: "calc(env(safe-area-inset-top) + 14px) 16px 14px", borderBottom: `1px solid ${LINE}`, fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 8 },
   drawerClose: { marginInlineStart: "auto", background: "none", border: "none", color: MUTED, fontSize: 24, cursor: "pointer", lineHeight: 1, padding: 0 },
   drawerBody: { flex: 1, overflow: "auto", padding: 16 },
   // lightbox
-  lightbox: { position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", display: "grid", placeItems: "center", zIndex: 60, padding: 24 },
+  lightbox: { position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", display: "grid", placeItems: "center", zIndex: 60, padding: "calc(env(safe-area-inset-top) + 24px) 24px calc(env(safe-area-inset-bottom) + 24px)" },
   lightboxImg: { maxWidth: "100%", maxHeight: "100%", borderRadius: 10, boxShadow: "0 20px 60px rgba(0,0,0,.6)" },
 };
 
