@@ -142,8 +142,13 @@ export default function TaskModal({ task, members, assemblies = {}, tagSuggestio
   const asmNames = Object.keys(assemblies);
   const [draft, setDraft] = useState(() => (task ? { ...task } : { ...blankTask(), asm: asmNames[0] || "" }));
   const [confirmDel, setConfirmDel] = useState(false);
+  // "new assembly" inline-entry mode: when on, the מכלול field is a text input
+  // (the rest of the time it's a picker). New names are created on save.
+  const [newAsm, setNewAsm] = useState(false);
   const set = (field, value) => setDraft((d) => ({ ...d, [field]: value }));
   useEscape(onClose);
+  // Options for the מכלול picker: managed list + the current value if it's legacy.
+  const asmOptions = [...new Set([...asmNames, ...(draft.asm && !asmNames.includes(draft.asm) ? [draft.asm] : [])])];
 
   const asmCol = asmColor(assemblies, draft.asm);
   const memberNames = members.map((m) => m.name);
@@ -174,9 +179,22 @@ export default function TaskModal({ task, members, assemblies = {}, tagSuggestio
 
         <div style={S.fields} className="mc-fields">
           <Field label="מכלול">
-            <input style={{ ...S.modalInput, fontWeight: 700, cursor: "text" }} value={draft.asm}
-              list="mc-asm" placeholder="בחר או הקלד חדש…" onChange={(e) => set("asm", e.target.value)} />
-            <datalist id="mc-asm">{asmNames.map((n) => <option key={n} value={n} />)}</datalist>
+            {newAsm ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input autoFocus style={{ ...S.modalInput, fontWeight: 700 }} value={draft.asm}
+                  placeholder="שם מכלול חדש…" onChange={(e) => set("asm", e.target.value)} />
+                <button type="button" title="חזרה לרשימה" style={{ ...S.reschedBtn }}
+                  onClick={() => { setNewAsm(false); if (!asmNames.includes(draft.asm)) set("asm", asmNames[0] || ""); }}>↩</button>
+              </div>
+            ) : (
+              <select value={draft.asm}
+                onChange={(e) => { if (e.target.value === "__new__") { setNewAsm(true); set("asm", ""); } else set("asm", e.target.value); }}
+                style={{ ...S.modalInput, fontWeight: 700, cursor: "pointer", color: draft.asm ? "#E6EDF3" : "#8B97A8" }}>
+                {!draft.asm && <option value="">בחר מכלול…</option>}
+                {asmOptions.map((n) => <option key={n} value={n}>{n}</option>)}
+                <option value="__new__">➕ מכלול חדש…</option>
+              </select>
+            )}
           </Field>
           <Field label="סטטוס">
             <Select value={draft.status} options={STATUS_ORDER} onChange={(v) => set("status", v)} color={STATUSES[draft.status].color} />
