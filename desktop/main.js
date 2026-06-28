@@ -4,6 +4,12 @@ const path = require("path");
 const store = require("./store");
 const { exportXlsx, importXlsx, templateXlsx } = require("./excel");
 
+// Load the UI in a dedicated session partition. Older builds accidentally
+// registered a service worker under the default file:// session that hijacked
+// page loads (black screen). A fresh partition can never inherit that SW, and
+// our data lives in SQLite (not the session), so nothing is lost.
+const PARTITION = "persist:mc";
+
 const KEYS = { tasks: "mc:tasks:v2", members: "mc:members:v2", proc: "mc:procurement:v2", log: "mc:auditlog:v2", asm: "mc:assemblies:v1" };
 const ASM_PALETTE = ["#E8B84B", "#58A6FF", "#3FB950", "#F778BA", "#BC8CFF", "#F0883E", "#56D4DD", "#DB6D28", "#A5D6A7", "#FF7B72"];
 
@@ -203,7 +209,7 @@ function createWindow() {
     width: 1320, height: 860, minWidth: 940, minHeight: 600,
     backgroundColor: "#0B0E14", title: "מרכז בקרת משימות",
     icon: path.join(__dirname, "build", "icon.png"),
-    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false },
+    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, partition: PARTITION },
   });
   Menu.setApplicationMenu(buildMenu(win));
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
@@ -214,9 +220,11 @@ app.whenReady().then(async () => {
   await store.init(path.join(baseDir(), "mission-control.db"));
   linkedXlsx = store.getConfig("linkedXlsx") || null;
 
-  // Wipe any service worker / cache-storage left by an earlier build before
-  // loading the UI. (Our data lives in SQLite, so this never touches user data.)
-  try { await session.defaultSession.clearStorageData({ storages: ["serviceworkers", "cachestorage"] }); } catch {}
+  // Wipe any service worker / cache left by an earlier build, from BOTH the old
+  // default session and our partition. (Data is in SQLite, never touched.)
+  for (const ses of [session.defaultSession, session.fromPartition(PARTITION)]) {
+    try { await ses.clearStorageData({ storages: ["serviceworkers", "cachestorage"] }); } catch {}
+  }
 
   ipcMain.on("mc:getItem", (e, key) => { e.returnValue = store.getItem(key); });
   ipcMain.on("mc:setItem", (e, key, json) => {
