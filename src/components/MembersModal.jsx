@@ -31,6 +31,11 @@ export default function MembersModal({ members, taskCounts, onChange, onClose })
     renameFrom.current = null;
     const t = to.trim();
     if (from == null || !t || t === from) return;
+    if (members.some((m) => m.id !== id && m.name === t)) {
+      alert("חבר צוות בשם הזה כבר קיים.");
+      onChange(members.map((m) => (m.id === id ? { ...m, name: from } : m))); // revert the typed name
+      return;
+    }
     onChange(members.map((m) => (m.id === id ? { ...m, name: t } : m)), { type: "rename", from, to: t });
   }
 

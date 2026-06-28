@@ -254,6 +254,21 @@ export default function App() {
     a.click(); URL.revokeObjectURL(url);
   }
 
+  // Clear demo/old data to start a fresh project. Keeps members + assemblies
+  // (the reusable team/structure); wipes tasks, procurement and the audit log.
+  // Export-first prompt, single confirm, undo-backed.
+  function newProject() {
+    if (!tasks.length && !proc.length) { alert("אין נתונים לניקוי."); return; }
+    if (confirm("מומלץ לייצא גיבוי לפני ניקוי הנתונים. לייצא גיבוי עכשיו?")) exportBackup();
+    if (!confirm("לנקות את כל המשימות, הרכש והיומן ולהתחיל פרויקט חדש? חברי הצוות והמכלולים יישמרו.")) return;
+    const snap = { tasks, proc, log };
+    setTasks([]); setProc([]); setLog([]);
+    record("פרויקט חדש", "נוקו משימות, רכש ויומן");
+    showUndo("הנתונים נוקו", () => {
+      setTasks(snap.tasks); setProc(snap.proc); setLog(snap.log);
+    });
+  }
+
   function importBackup(file) {
     const reader = new FileReader();
     reader.onload = () => {
@@ -316,6 +331,7 @@ export default function App() {
   // blockers (תקוע) first, then in-progress, in-review, completed.
   function exportDevSummary() {
     const esc = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const pname = (projectName || "").trim();
     const today = new Date().toLocaleDateString("he-IL", { day: "2-digit", month: "long", year: "numeric" });
     const overdueCount = tasks.filter((t) => isOverdue(t.due) && t.status !== "בוצע").length;
 
@@ -352,7 +368,7 @@ export default function App() {
       : "";
 
     const html = `<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8">
-<title>דוח סטטוס פרויקט — מרכז בקרת משימות</title>
+<title>דוח סטטוס פרויקט${pname ? ` — ${esc(pname)}` : ""}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;800&display=swap');
   body{font-family:'Heebo',system-ui,sans-serif;max-width:840px;margin:40px auto;padding:0 20px;color:#1a1f29;line-height:1.55}
@@ -373,8 +389,8 @@ export default function App() {
   .tag{font-size:11px;background:#eef1f6;border-radius:20px;padding:1px 8px;color:#4a5365}
   .muted{color:#8b97a8} @media print{body{margin:0} .task{break-inside:avoid}}
 </style></head><body>
-  <h1>דוח סטטוס פרויקט</h1>
-  <div class="meta-top">מרכז בקרת משימות · הופק בתאריך ${today} · ${tasks.length} משימות · ${counts["בוצע"]} הושלמו</div>
+  <h1>דוח סטטוס פרויקט${pname ? ` — ${esc(pname)}` : ""}</h1>
+  <div class="meta-top">${pname ? esc(pname) + " · " : ""}מרכז בקרת משימות · הופק בתאריך ${today} · ${tasks.length} משימות · ${counts["בוצע"]} הושלמו</div>
   <div class="chips">${summaryChips}</div>
   ${attention}
   ${sections || '<p class="muted">אין משימות.</p>'}
@@ -384,7 +400,8 @@ export default function App() {
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `דוח-סטטוס-${new Date().toISOString().slice(0, 10)}.html`;
+    const safeName = (pname || "מרכז-משימות").replace(/[\\/:*?"<>|]/g, "-");
+    a.href = url; a.download = `דוח-סטטוס-${safeName}-${new Date().toISOString().slice(0, 10)}.html`;
     a.click(); URL.revokeObjectURL(url);
     record("הופק דוח סטטוס", `${tasks.length} משימות · ${counts["תקוע"]} תקועות`);
   }
@@ -528,6 +545,7 @@ export default function App() {
           onExcelExport={() => { setShowPanel(false); exportExcelWeb(); }}
           onExcelImport={() => { setShowPanel(false); excelRef.current?.click(); }}
           onExcelTemplate={() => { setShowPanel(false); downloadTemplateWeb(); }}
+          onNewProject={() => { setShowPanel(false); newProject(); }}
           onClose={() => setShowPanel(false)} />
       )}
       {excelImport && (
@@ -555,14 +573,17 @@ function ImportChoiceModal({ data, onReplace, onMerge, onCancel }) {
           <button style={{ ...S.panelBtn, justifyContent: "center", marginBottom: 0 }} onClick={onMerge}>הוסף לקיים</button>
           <button style={{ ...S.panelBtn, justifyContent: "center", marginBottom: 0, color: MUTED }} onClick={onCancel}>ביטול</button>
         </div>
-        <div style={{ fontSize: 11.5, color: MUTED, marginTop: 12 }}>"החלף הכל" ימחק את הנתונים הקיימים ויטען מחדש מהאקסל.</div>
+        <div style={{ fontSize: 11.5, color: MUTED, marginTop: 12, lineHeight: 1.6 }}>
+          "החלף הכל" ימחק את הנתונים הקיימים ויטען מחדש מהאקסל.
+          <br />שים לב: קובץ Excel אינו כולל תת-משימות, הערות או קבצים מצורפים — אלה לא ייובאו.
+        </div>
       </div>
     </div>
   );
 }
 
 // ============================== sub-components ==============================
-function SidePanel({ counts, total, members, onDevSummary, onOpenLog, onExport, onImport, onExcelExport, onExcelImport, onExcelTemplate, onClose }) {
+function SidePanel({ counts, total, members, onDevSummary, onOpenLog, onExport, onImport, onExcelExport, onExcelImport, onExcelTemplate, onNewProject, onClose }) {
   useEscape(onClose);
   return (
     <>
@@ -621,6 +642,14 @@ function SidePanel({ counts, total, members, onDevSummary, onOpenLog, onExport, 
           <button style={S.panelBtn} onClick={onExcelTemplate}>
             <span style={S.panelBtnIcon}>📋</span>
             <span>הורד תבנית Excel<div style={S.panelBtnSub}>תבנית ריקה למילוי וייבוא</div></span>
+          </button>
+        </div>
+
+        <div style={S.panelSection}>
+          <div style={S.panelTitle}>פרויקט</div>
+          <button style={S.panelBtn} onClick={onNewProject}>
+            <span style={S.panelBtnIcon}>🧹</span>
+            <span>פרויקט חדש / נקה נתוני דוגמה<div style={S.panelBtnSub}>מחיקת משימות, רכש ויומן · הצוות והמכלולים יישמרו · ניתן לביטול</div></span>
           </button>
         </div>
 
