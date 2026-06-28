@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   STATUSES, STATUS_ORDER, ASSEMBLIES, PRIORITIES, SEED, DEFAULT_MEMBERS, MEMBER_PALETTE,
   PROC_STATUSES, PROC_STATUS_ORDER, PROC_SEED, STORE, readable, initials, tagColor, asmColor,
+  startOfToday, addDays, dateToDue,
 } from "./lib/constants.js";
+import SwipeRow from "./components/SwipeRow.jsx";
 import { loadJSON, saveJSON } from "./lib/storage.js";
 import { useEscape } from "./lib/useEscape.js";
 import { S, CSS, MUTED, GOLD } from "./lib/styles.js";
@@ -38,6 +40,7 @@ export default function App() {
   const [proc, setProc] = useState([]);
   const [log, setLog] = useState([]);
   const [assemblies, setAssemblies] = useState({});
+  const [projectName, setProjectName] = useState("");
   const [loaded, setLoaded] = useState(false);
 
   const [view, setView] = useState("board");
@@ -82,6 +85,7 @@ export default function App() {
     setProc(loadJSON(STORE.procurement, PROC_SEED));
     setLog(loadJSON(STORE.audit, []));
     setAssemblies(asm);
+    setProjectName(loadJSON(STORE.project, ""));
     setFilterPerson(m[0]?.name || "");
     setFilterAsm(Object.keys(asm)[1] || Object.keys(asm)[0] || "");
     setLoaded(true);
@@ -92,6 +96,7 @@ export default function App() {
   useEffect(() => { if (loaded) saveJSON(STORE.procurement, proc); }, [proc, loaded]);
   useEffect(() => { if (loaded) saveJSON(STORE.audit, log); }, [log, loaded]);
   useEffect(() => { if (loaded) saveJSON(STORE.assemblies, assemblies); }, [assemblies, loaded]);
+  useEffect(() => { if (loaded) saveJSON(STORE.project, projectName); }, [projectName, loaded]);
 
   // ---------- audit ----------
   function record(action, detail) {
@@ -187,6 +192,14 @@ export default function App() {
   function agendaReschedule(t, due) {
     patchTask(t.id, { due }, `"${t.task}" · תג״ב → ${due || "—"}`);
     showUndo(`"${t.task}" — תג״ב ${due || "הוסר"}`, restoreTask(t));
+  }
+  const onPostpone = (t) => agendaReschedule(t, dateToDue(addDays(startOfToday(), 1)));
+  // Drag a card to another status column.
+  function moveTaskStatus(id, status) {
+    const t = tasks.find((x) => x.id === id);
+    if (!t || t.status === status) return;
+    patchTask(id, { status }, `"${t.task}" · סטטוס → "${status}"`);
+    showUndo(`"${t.task}" → ${status}`, restoreTask(t));
   }
 
   // ---------- members ----------
@@ -358,7 +371,13 @@ export default function App() {
         <div style={S.titleRow}>
           <div style={S.crest}>◆</div>
           <div style={{ minWidth: 0 }}>
-            <h1 style={S.h1}>מרכז בקרת משימות</h1>
+            <div style={S.titleLine}>
+              <h1 style={S.h1}>מרכז בקרת משימות</h1>
+              <span style={S.titleSep}>·</span>
+              <input style={S.projectInput} value={projectName} placeholder="+ שם פרויקט"
+                title="שם הפרויקט של הקובץ הנוכחי"
+                onChange={(e) => setProjectName(e.target.value)} />
+            </div>
             <div style={S.sub}>{tasks.length} משימות · {counts["בוצע"]} הושלמו</div>
           </div>
           <div style={S.headRight}>
@@ -385,30 +404,19 @@ export default function App() {
       <div style={S.body}>
         <main style={S.main}>
           {view === "board" && (
-            <div style={S.board} className="mc-board">
-              {STATUS_ORDER.map((s) => {
-                const items = filtered.filter((t) => t.status === s);
-                return (
-                  <div key={s} style={S.col}>
-                    <div style={S.colHead}>
-                      <span style={{ ...S.dot, background: STATUSES[s].color, boxShadow: `0 0 8px ${STATUSES[s].glow}` }} />
-                      {s}<span style={S.cnt}>{items.length}</span>
-                    </div>
-                    {items.map((t) => <Card key={t.id} t={t} members={members} assemblies={assemblies} onClick={() => setEditing(t)} />)}
-                    {!items.length && <div style={S.empty}>—</div>}
-                  </div>
-                );
-              })}
-            </div>
+            <BoardColumns items={filtered} members={members} assemblies={assemblies}
+              onPick={setEditing} onMove={moveTaskStatus} />
           )}
 
           {view === "people" && (
             <FilterView label="איש צוות" options={memberNames} value={filterPerson} onChange={setFilterPerson}
-              items={filtered.filter((t) => t.who === filterPerson)} members={members} assemblies={assemblies} onPick={setEditing} />
+              items={filtered.filter((t) => t.who === filterPerson)} members={members} assemblies={assemblies}
+              onPick={setEditing} onComplete={agendaComplete} onPostpone={onPostpone} onMove={moveTaskStatus} />
           )}
           {view === "asm" && (
             <FilterView label="מכלול" options={Object.keys(assemblies)} value={filterAsm} onChange={setFilterAsm}
-              items={filtered.filter((t) => t.asm === filterAsm)} members={members} assemblies={assemblies} onPick={setEditing} colorMap={assemblies} />
+              items={filtered.filter((t) => t.asm === filterAsm)} members={members} assemblies={assemblies} colorMap={assemblies}
+              onPick={setEditing} onComplete={agendaComplete} onPostpone={onPostpone} onMove={moveTaskStatus} />
           )}
           {view === "agenda" && (
             <AgendaView tasks={filtered} members={members} assemblies={assemblies} onPick={setEditing}
@@ -525,14 +533,18 @@ function memberColor(members, name) {
   return members.find((m) => m.name === name)?.color || GOLD;
 }
 
-function Card({ t, members, assemblies, onClick }) {
+function Card({ t, members, assemblies, onClick, draggable }) {
   const ac = asmColor(assemblies, t.asm);
   const att = t.attachments?.length || 0;
   const checks = t.checklist?.length || 0;
   const checksDone = (t.checklist || []).filter((c) => c.done).length;
   const overdue = isOverdue(t.due) && t.status !== "בוצע";
+  const dragProps = draggable ? {
+    draggable: true,
+    onDragStart: (e) => { e.dataTransfer.setData("text/plain", String(t.id)); e.dataTransfer.effectAllowed = "move"; },
+  } : {};
   return (
-    <div style={S.card} onClick={onClick} className="card">
+    <div style={{ ...S.card, ...(draggable ? { cursor: "grab" } : {}) }} onClick={onClick} className="card" {...dragProps}>
       <span style={{ ...S.pri, color: PRIORITIES[t.pri], borderColor: PRIORITIES[t.pri] + "55" }}>{t.pri}</span>
       <div style={S.cardTask}>{t.task}</div>
       {!!(t.tags?.length) && (
@@ -556,15 +568,50 @@ function Card({ t, members, assemblies, onClick }) {
   );
 }
 
-function FilterView({ label, options, value, onChange, items, members, assemblies, onPick, colorMap }) {
-  const stats = STATUS_ORDER.reduce((a, s) => ((a[s] = items.filter((t) => t.status === s).length), a), {});
+// Kanban columns with drag-and-drop between statuses. Used by the main board
+// and by the filter views' board layout.
+function BoardColumns({ items, members, assemblies, onPick, onMove }) {
+  const [over, setOver] = useState(null);
   return (
-    <div style={S.fv}>
+    <div style={S.board} className="mc-board">
+      {STATUS_ORDER.map((s) => {
+        const colItems = items.filter((t) => t.status === s);
+        return (
+          <div key={s} style={{ ...S.col, ...(over === s ? S.colOver : {}) }}
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (over !== s) setOver(s); }}
+            onDragLeave={(e) => { if (e.currentTarget === e.target) setOver(null); }}
+            onDrop={(e) => { e.preventDefault(); setOver(null); const id = +e.dataTransfer.getData("text/plain"); if (id) onMove(id, s); }}>
+            <div style={S.colHead}>
+              <span style={{ ...S.dot, background: STATUSES[s].color, boxShadow: `0 0 8px ${STATUSES[s].glow}` }} />
+              {s}<span style={S.cnt}>{colItems.length}</span>
+            </div>
+            {colItems.map((t) => <Card key={t.id} t={t} members={members} assemblies={assemblies} onClick={() => onPick(t)} draggable />)}
+            {!colItems.length && <div style={S.empty}>—</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FilterView({ label, options, value, onChange, items, members, assemblies, onPick, colorMap, onComplete, onPostpone, onMove }) {
+  const [layout, setLayout] = useState("list");
+  const stats = STATUS_ORDER.reduce((a, s) => ((a[s] = items.filter((t) => t.status === s).length), a), {});
+  // Group the list by מכלול (then status), so same-assembly tasks sit together.
+  const sorted = [...items].sort((a, b) =>
+    (a.asm || "").localeCompare(b.asm || "", "he") || STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status));
+
+  return (
+    <div style={layout === "board" ? undefined : S.fv}>
       <div style={S.fvHead}>
         <span style={S.fvLabel}>{label}:</span>
         <select style={S.fvSelect} value={value} onChange={(e) => onChange(e.target.value)}>
           {options.map((o) => <option key={o}>{o}</option>)}
         </select>
+        <div style={S.layoutToggle}>
+          <button style={{ ...S.layoutBtn, ...(layout === "list" ? S.layoutBtnOn : {}) }} onClick={() => setLayout("list")}>☰ רשימה</button>
+          <button style={{ ...S.layoutBtn, ...(layout === "board" ? S.layoutBtnOn : {}) }} onClick={() => setLayout("board")}>▦ לוח</button>
+        </div>
         <div style={S.fvStats} className="mc-fvstats">
           {STATUS_ORDER.map((s) => (
             <div key={s} style={S.fvStat}>
@@ -573,24 +620,29 @@ function FilterView({ label, options, value, onChange, items, members, assemblie
           ))}
         </div>
       </div>
-      <div>
-        {items.map((t) => {
-          const overdue = isOverdue(t.due) && t.status !== "בוצע";
-          return (
-            <div key={t.id} style={S.qrow} className="card" onClick={() => onPick(t)}>
-              <span style={{ ...S.qdot, background: STATUSES[t.status].color }} />
-              {(() => { const c = asmColor(colorMap || assemblies, t.asm); return (
-              <span style={{ ...S.qAsm, background: c, color: readable(c) }}>{t.asm}</span>
-              ); })()}
-              <span style={S.qTask}>{t.task}</span>
-              {(t.attachments?.length || 0) > 0 && <span style={S.clip}>📎 {t.attachments.length}</span>}
-              {t.due && <span style={{ ...S.qDue, ...(overdue ? S.overdue : {}) }}>{t.due}</span>}
-              <span style={{ ...S.pri, position: "static", color: PRIORITIES[t.pri], borderColor: PRIORITIES[t.pri] + "55" }}>{t.pri}</span>
-            </div>
-          );
-        })}
-        {!items.length && <div style={S.empty}>אין משימות</div>}
-      </div>
+
+      {layout === "board" ? (
+        <BoardColumns items={items} members={members} assemblies={assemblies} onPick={onPick} onMove={onMove} />
+      ) : (
+        <div>
+          {sorted.map((t) => {
+            const overdue = isOverdue(t.due) && t.status !== "בוצע";
+            const c = asmColor(colorMap || assemblies, t.asm);
+            return (
+              <SwipeRow key={t.id} rowStyle={{ ...S.qrow, marginBottom: 0 }}
+                onComplete={() => onComplete?.(t)} onPostpone={() => onPostpone?.(t)} onClick={() => onPick(t)}>
+                <span style={{ ...S.qdot, background: STATUSES[t.status].color }} />
+                <span style={{ ...S.qAsm, background: c, color: readable(c) }}>{t.asm}</span>
+                <span style={S.qTask}>{t.task}</span>
+                {(t.attachments?.length || 0) > 0 && <span style={S.clip}>📎 {t.attachments.length}</span>}
+                {t.due && <span style={{ ...S.qDue, ...(overdue ? S.overdue : {}) }}>{t.due}</span>}
+                <span style={{ ...S.pri, position: "static", color: PRIORITIES[t.pri], borderColor: PRIORITIES[t.pri] + "55" }}>{t.pri}</span>
+              </SwipeRow>
+            );
+          })}
+          {!sorted.length && <div style={S.empty}>אין משימות</div>}
+        </div>
+      )}
     </div>
   );
 }

@@ -73,6 +73,7 @@ export const STORE = {
   audit: "mc:auditlog:v2",
   procurement: "mc:procurement:v2",
   assemblies: "mc:assemblies:v1",
+  project: "mc:project:v1",
 };
 
 // Choose readable text color on a colored chip by luminance.

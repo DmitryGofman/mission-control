@@ -1,6 +1,7 @@
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { S, MUTED, GOLD } from "../lib/styles.js";
+import SwipeRow from "./SwipeRow.jsx";
 import {
   STATUSES, PRIORITIES, readable, initials, asmColor,
   dueToDate, dateToDue, startOfToday, addDays,
@@ -29,62 +30,6 @@ const GROUPS = [
 
 function memberColor(members, name) {
   return members.find((m) => m.name === name)?.color || GOLD;
-}
-
-// Swipe gesture wrapper: drag right → complete, drag left → postpone.
-function SwipeRow({ onComplete, onPostpone, onClick, children }) {
-  const [dx, setDx] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const startX = useRef(null);
-  const moved = useRef(false);
-  const THRESH = 95;
-  const MAX = 130;
-
-  function down(e) {
-    if (e.target.closest("[data-noswipe]")) return;
-    startX.current = e.clientX;
-    moved.current = false;
-    setDragging(true);
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-  }
-  function move(e) {
-    if (startX.current == null) return;
-    let d = e.clientX - startX.current;
-    if (Math.abs(d) > 6) moved.current = true;
-    d = Math.max(-MAX, Math.min(MAX, d));
-    setDx(d);
-  }
-  function up() {
-    if (startX.current == null) return;
-    const d = dx;
-    startX.current = null;
-    setDragging(false);
-    setDx(0);
-    if (d >= THRESH) onComplete?.();
-    else if (d <= -THRESH) onPostpone?.();
-  }
-  function click() {
-    if (!moved.current) onClick?.();
-  }
-
-  const past = Math.abs(dx) >= THRESH;
-  return (
-    <div style={S.swipeOuter}>
-      <div style={{ ...S.swipeAction, ...S.swipeActionL, opacity: dx > 4 ? 1 : 0 }}>
-        ✓ {past && dx > 0 ? "שחרר לסיום" : "בוצע"}
-      </div>
-      <div style={{ ...S.swipeAction, ...S.swipeActionR, opacity: dx < -4 ? 1 : 0 }}>
-        {past && dx < 0 ? "שחרר לדחייה" : "דחה למחר"} 📅
-      </div>
-      <div
-        className={dragging ? undefined : "swipe-snap"}
-        style={{ ...S.agendaRow, transform: `translateX(${dx}px)` }}
-        onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-        onClick={click}>
-        {children}
-      </div>
-    </div>
-  );
 }
 
 // Inline month calendar (no native picker, so it can't be dismissed early).
