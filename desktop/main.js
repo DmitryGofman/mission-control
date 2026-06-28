@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, shell, dialog } = require("electron");
+const { app, BrowserWindow, ipcMain, Menu, shell, dialog, session } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const store = require("./store");
@@ -119,6 +119,11 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   await store.init(path.join(baseDir(), "mission-control.db"));
+
+  // Belt-and-suspenders: wipe any service worker / cache-storage left by an
+  // earlier build before loading the UI. (Our data lives in SQLite, not here,
+  // so this never touches user data.) Prevents a stale SW from breaking load.
+  try { await session.defaultSession.clearStorageData({ storages: ["serviceworkers", "cachestorage"] }); } catch {}
 
   // Synchronous key/value (mirrors localStorage) + async blob ops (attachments).
   ipcMain.on("mc:getItem", (e, key) => { e.returnValue = store.getItem(key); });
