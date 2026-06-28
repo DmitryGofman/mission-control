@@ -1,21 +1,19 @@
 # Mission Control — Windows desktop app (download)
 
-**File:** `MissionControl-Windows-x64.zip` (~98 MB) · **version 0.3.4**
+**File:** `MissionControl-Windows-x64.zip` (~98 MB) · **version 0.3.5**
 
 1. Download the zip (click the file above, then **Download raw file**).
 2. **Extract the whole folder** somewhere permanent (Desktop is fine).
 3. Double-click **`Mission Control.exe`**.
 4. First launch may show Windows SmartScreen → **More info → Run anyway** (unsigned app, one-time).
-5. Your data is saved in **`mission-control.db`** next to the app — copy that file to back it up.
+5. Your data: `mission-control.db` + an `attachments` folder, both next to the app — copy the whole folder to back up.
 
-## What's new in 0.3.4
-- Swipe animation in the by-person / by-מכלול list views is now smooth — the card no longer jumps or lags behind the cursor while you drag it. It behaves exactly like the agenda (timeline) swipe.
+## What's new in 0.3.5
+- **You can now reach the files you attach.** Attachments are saved as real files in an `attachments` folder next to the app (no longer hidden inside the database). In each task, every attachment has **פתח** (open in the right program — PDF, CAD, etc.) and **הצג בתיקייה** (reveal) buttons. New menu item: **קובץ → פתח תיקיית קבצים מצורפים**. Existing attachments are moved out to files automatically on first launch.
+- **Project documentation export.** ⋮ panel → **"ייצוא תיעוד פרויקט (ZIP)"** creates a zip with a full `report.html` (every task with notes, checklists, comments, and images shown inline) plus a `files/` folder containing all the attached documents (PDF, CAD, BOM…), linked from the report. Print the HTML to PDF for a shareable project record.
 
-## 0.3.3
-- מכלול rename commits once when you leave the field (no per-keystroke re-tagging); clearing the field no longer orphans tasks.
-- Renaming a member/מכלול onto an existing name is blocked instead of silently merging.
-- Excel import reads real date cells in the תג"ב column correctly.
-- Project name appears in the status report and in exported Excel files.
-- New **"פרויקט חדש / נקה נתוני דוגמה"** button (⋮ panel) — clears demo data, keeps team and מכלולים, undoable.
+## Earlier
+- 0.3.4 — smooth swipe animation in the filter list views.
+- 0.3.3 — מכלול rename fix, duplicate-name guard, Excel date import, project name in reports/Excel, "clear demo data" action.
 
 This branch only holds the build. The app source lives on `main` (see `desktop/`).
