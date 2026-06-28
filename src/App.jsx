@@ -5,7 +5,7 @@ import {
   startOfToday, addDays, dateToDue,
 } from "./lib/constants.js";
 import SwipeRow from "./components/SwipeRow.jsx";
-import { loadJSON, saveJSON } from "./lib/storage.js";
+import { loadJSON, saveJSON, getBlob } from "./lib/storage.js";
 import * as excelWeb from "./lib/excelWeb.js";
 import { useEscape } from "./lib/useEscape.js";
 import { S, CSS, MUTED, GOLD } from "./lib/styles.js";
@@ -62,6 +62,8 @@ export default function App() {
   const [excelImport, setExcelImport] = useState(null); // { tasks, procurement } pending replace/merge choice
   const undoTimer = useRef(null);
   const undoRef = useRef(null);
+  const docBusyRef = useRef(false);
+  const [docBusy, setDocBusy] = useState(false);
   useEffect(() => { undoRef.current = undo; }, [undo]);
 
   // Ctrl/Cmd+Z triggers the pending undo (unless typing in a field, where the
@@ -406,6 +408,132 @@ export default function App() {
     record("הופק דוח סטטוס", `${tasks.length} משימות · ${counts["תקוע"]} תקועות`);
   }
 
+  // Full project documentation: a ZIP containing report.html (with images
+  // embedded inline) plus every non-image attachment (PDF, CAD, BOM, …) as a
+  // real file under files/, linked from the report. Big docs stay out of the
+  // HTML so it remains a viewable single page.
+  async function exportDocumentation() {
+    if (docBusyRef.current) return;
+    docBusyRef.current = true;
+    setDocBusy(true);
+    try {
+      const { default: JSZip } = await import("jszip");
+      const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+      const pname = (projectName || "").trim();
+      const today = new Date().toLocaleDateString("he-IL", { day: "2-digit", month: "long", year: "numeric" });
+      const zip = new JSZip();
+      const usedNames = new Set();
+      const blobToDataURL = (blob) => new Promise((res, rej) => {
+        const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob);
+      });
+
+      let imgCount = 0, docCount = 0;
+      async function attachmentsHtml(t) {
+        const atts = t.attachments || [];
+        let imgs = "", docs = "";
+        for (const a of atts) {
+          let blob;
+          try { blob = await getBlob(a.id); } catch { blob = null; }
+          if (!blob) continue;
+          if (a.kind === "image") {
+            const dataUrl = await blobToDataURL(blob);
+            imgs += `<a href="${dataUrl}" target="_blank"><img class="att" src="${dataUrl}" alt="${esc(a.name)}" title="${esc(a.name)}"></a>`;
+            imgCount++;
+          } else {
+            let base = (a.name || a.id).replace(/[\\/:*?"<>|]/g, "_");
+            let fn = base, i = 1;
+            while (usedNames.has(fn)) {
+              const dot = base.lastIndexOf(".");
+              fn = dot > 0 ? `${base.slice(0, dot)} (${i})${base.slice(dot)}` : `${base} (${i})`;
+              i++;
+            }
+            usedNames.add(fn);
+            zip.file(`files/${fn}`, await blob.arrayBuffer());
+            docs += `<a class="doc" href="files/${encodeURIComponent(fn)}">📎 ${esc(a.name)}<span class="docsz">${(a.size / 1024 / 1024 >= 1 ? (a.size / 1024 / 1024).toFixed(1) + " MB" : Math.max(1, Math.round(a.size / 1024)) + " KB")}</span></a>`;
+            docCount++;
+          }
+        }
+        let html = "";
+        if (imgs) html += `<div class="atts">${imgs}</div>`;
+        if (docs) html += `<div class="docs">${docs}</div>`;
+        return html;
+      }
+
+      const DOC_ORDER = ["תקוע", "בעבודה", "לבדיקה", "בוצע"];
+      let body = "";
+      for (const st of DOC_ORDER) {
+        const items = tasks.filter((t) => t.status === st);
+        if (!items.length) continue;
+        const sc = STATUSES[st].color;
+        body += `<h2 class="status" style="border-color:${sc}"><span class="sdot" style="background:${sc}"></span>${esc(st)} <span class="n">${items.length}</span></h2>`;
+        for (const t of items) {
+          const ac = asmColor(assemblies, t.asm);
+          const meta = [
+            t.who && `מבצע: ${esc(t.who)}`, t.ctrl && `בקר: ${esc(t.ctrl)}`,
+            `עדיפות: ${esc(t.pri)}`, t.due && `תג״ב: ${esc(t.due)}`,
+          ].filter(Boolean).join(" · ");
+          const checklist = (t.checklist || []).length
+            ? `<ul class="chk">${t.checklist.map((c) => `<li class="${c.done ? "done" : ""}">${c.done ? "✓" : "▢"} ${esc(c.text)}</li>`).join("")}</ul>` : "";
+          const comments = (t.comments || []).length
+            ? `<div class="cmts">${t.comments.map((c) => `<div class="cmt">${esc(c.text)}</div>`).join("")}</div>` : "";
+          const atts = await attachmentsHtml(t);
+          body += `<div class="task">
+            <div class="row1">
+              ${t.asm ? `<span class="asm" style="background:${ac};color:${readable(ac)}">${esc(t.asm)}</span>` : ""}
+              <span class="ttl">${esc(t.task)}</span>
+            </div>
+            ${meta ? `<div class="meta">${meta}</div>` : ""}
+            ${t.notes ? `<div class="notes">${esc(t.notes)}</div>` : ""}
+            ${checklist}${comments}${atts}
+          </div>`;
+        }
+      }
+      if (!body) body = '<p class="muted">אין משימות.</p>';
+
+      const html = `<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8">
+<title>תיעוד פרויקט${pname ? ` — ${esc(pname)}` : ""}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;800&display=swap');
+  body{font-family:'Heebo',system-ui,sans-serif;max-width:880px;margin:40px auto;padding:0 20px;color:#1a1f29;line-height:1.55}
+  h1{font-size:26px;margin:0 0 4px} .meta-top{color:#6b7686;font-size:13px;margin-bottom:18px}
+  h2.status{font-size:17px;margin:26px 0 12px;display:flex;align-items:center;gap:9px;border-right:4px solid;padding:2px 10px 6px 0}
+  .sdot{width:10px;height:10px;border-radius:50%;display:inline-block} .n{color:#8b97a8;font-size:13px;font-weight:400}
+  .task{border:1px solid #e8ebf1;border-radius:10px;padding:12px 14px;margin-bottom:11px}
+  .row1{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .asm{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:20px}
+  .ttl{font-weight:600;font-size:15px} .meta{color:#5a6473;font-size:12.5px;margin-top:6px}
+  .notes{font-size:12.5px;color:#3b4351;margin-top:8px;white-space:pre-wrap;background:#f7f8fa;border-radius:7px;padding:8px 10px}
+  ul.chk{margin:8px 0 0;padding:0;list-style:none;font-size:12.5px;color:#3b4351} ul.chk li{padding:1px 0} ul.chk li.done{color:#8b97a8;text-decoration:line-through}
+  .cmts{margin-top:8px;display:flex;flex-direction:column;gap:5px} .cmt{font-size:12px;color:#4a5365;background:#eef1f6;border-radius:7px;padding:6px 9px}
+  .atts{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px}
+  img.att{max-width:200px;max-height:200px;border-radius:8px;border:1px solid #e3e7ee;object-fit:cover}
+  .docs{margin-top:9px;display:flex;flex-direction:column;gap:5px}
+  a.doc{font-size:12.5px;color:#1f6feb;text-decoration:none;display:flex;align-items:center;gap:7px} a.doc:hover{text-decoration:underline}
+  .docsz{color:#8b97a8;font-size:11px;font-family:monospace} .muted{color:#8b97a8}
+  @media print{body{margin:0} .task{break-inside:avoid}}
+</style></head><body>
+  <h1>תיעוד פרויקט${pname ? ` — ${esc(pname)}` : ""}</h1>
+  <div class="meta-top">${pname ? esc(pname) + " · " : ""}הופק בתאריך ${today} · ${tasks.length} משימות · ${imgCount} תמונות · ${docCount} מסמכים מצורפים</div>
+  ${body}
+  <p class="muted" style="margin-top:30px;font-size:12px">התמונות מוטמעות בקובץ. המסמכים (PDF, CAD וכו׳) נמצאים בתיקיית <b>files</b> שליד קובץ זה. להמרה ל-PDF: פתחו בדפדפן והדפיסו (Ctrl/Cmd+P).</p>
+</body></html>`;
+
+      zip.file("report.html", html);
+      const safe = (pname || "מרכז-משימות").replace(/[\\/:*?"<>|]/g, "-");
+      const out = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(out);
+      const a = document.createElement("a");
+      a.href = url; a.download = `תיעוד-${safe}-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      record("הופק תיעוד פרויקט", `${tasks.length} משימות · ${imgCount} תמונות · ${docCount} מסמכים`);
+    } catch (e) {
+      alert("הפקת התיעוד נכשלה: " + (e?.message || e));
+    } finally {
+      docBusyRef.current = false;
+      setDocBusy(false);
+    }
+  }
+
   // ---------- derived ----------
   const counts = useMemo(
     () => STATUS_ORDER.reduce((a, s) => ((a[s] = tasks.filter((t) => t.status === s).length), a), {}),
@@ -539,6 +667,7 @@ export default function App() {
         <SidePanel
           counts={counts} total={tasks.length} members={members.length}
           onDevSummary={exportDevSummary}
+          onDocumentation={() => { setShowPanel(false); exportDocumentation(); }} docBusy={docBusy}
           onOpenLog={() => { setShowPanel(false); setShowLog(true); }}
           onExport={exportBackup}
           onImport={() => importRef.current?.click()}
@@ -583,7 +712,7 @@ function ImportChoiceModal({ data, onReplace, onMerge, onCancel }) {
 }
 
 // ============================== sub-components ==============================
-function SidePanel({ counts, total, members, onDevSummary, onOpenLog, onExport, onImport, onExcelExport, onExcelImport, onExcelTemplate, onNewProject, onClose }) {
+function SidePanel({ counts, total, members, onDevSummary, onDocumentation, docBusy, onOpenLog, onExport, onImport, onExcelExport, onExcelImport, onExcelTemplate, onNewProject, onClose }) {
   useEscape(onClose);
   return (
     <>
@@ -614,6 +743,10 @@ function SidePanel({ counts, total, members, onDevSummary, onOpenLog, onExport, 
           <button style={S.panelBtn} onClick={onDevSummary}>
             <span style={S.panelBtnIcon}>📄</span>
             <span>ייצוא דוח סטטוס<div style={S.panelBtnSub}>סטטוס מלא — תקועים, בעבודה והושלמו · להפקת מצגת</div></span>
+          </button>
+          <button style={S.panelBtn} onClick={onDocumentation} disabled={docBusy}>
+            <span style={S.panelBtnIcon}>🗂️</span>
+            <span>{docBusy ? "מכין תיעוד…" : "ייצוא תיעוד פרויקט (ZIP)"}<div style={S.panelBtnSub}>דוח מלא עם תמונות מוטמעות + כל הקבצים המצורפים (PDF, CAD…) בתיקייה</div></span>
           </button>
           <button style={S.panelBtn} onClick={onOpenLog}>
             <span style={S.panelBtnIcon}>🕘</span>

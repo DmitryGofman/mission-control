@@ -7,7 +7,9 @@ contextBridge.exposeInMainWorld("mcStore", {
   getItemSync: (k) => ipcRenderer.sendSync("mc:getItem", k),
   setItemSync: (k, v) => ipcRenderer.sendSync("mc:setItem", k, v),
   dbPath: () => ipcRenderer.sendSync("mc:dbPath"),
-  putBlob: (id, bytes, type) => ipcRenderer.invoke("mc:putBlob", id, bytes, type),
+  putBlob: (id, bytes, type, name) => ipcRenderer.invoke("mc:putBlob", id, bytes, type, name),
   getBlob: (id) => ipcRenderer.invoke("mc:getBlob", id),
   deleteBlob: (id) => ipcRenderer.invoke("mc:deleteBlob", id),
+  openBlob: (id) => ipcRenderer.invoke("mc:openAttachment", id),
+  revealBlob: (id) => ipcRenderer.invoke("mc:revealAttachment", id),
 });

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { S, MUTED } from "../lib/styles.js";
-import { putBlob, getBlob, deleteBlob } from "../lib/storage.js";
+import { putBlob, getBlob, deleteBlob, isDesktop, openAttachment, revealAttachment } from "../lib/storage.js";
 
 const MAX_BYTES = 25 * 1024 * 1024; // 25MB per file guard
 
@@ -81,6 +81,16 @@ export default function Attachments({ value = [], onChange }) {
     onChange(value.filter((a) => a.id !== id));
   }
 
+  // Web has no filesystem, so "access" means download the file to disk.
+  async function download(a) {
+    const blob = await getBlob(a.id);
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const el = document.createElement("a");
+    el.href = url; el.download = a.name || "attachment"; el.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   function openFull(id) {
     if (urls[id]) setLightbox(urls[id]);
   }
@@ -109,6 +119,11 @@ export default function Attachments({ value = [], onChange }) {
                 : <div style={{ ...S.empty, padding: 0, marginTop: 28 }}>…</div>}
               <button type="button" style={S.thumbX}
                 onClick={(e) => { e.stopPropagation(); remove(a.id); }} aria-label="הסר">×</button>
+              {isDesktop
+                ? <button type="button" style={S.thumbAct} title="הצג בתיקייה"
+                    onClick={(e) => { e.stopPropagation(); revealAttachment(a.id); }}>📂</button>
+                : <button type="button" style={S.thumbAct} title="הורד"
+                    onClick={(e) => { e.stopPropagation(); download(a); }}>⬇</button>}
             </div>
           ))}
         </div>
@@ -119,6 +134,14 @@ export default function Attachments({ value = [], onChange }) {
           <span style={S.fileIcon}>{fileGlyph(a.type)}</span>
           <span style={S.fileName} title={a.name}>{a.name}</span>
           <span style={S.fileSize}>{fmtSize(a.size)}</span>
+          {isDesktop ? (
+            <>
+              <button type="button" style={S.fileAct} title="פתח בתוכנה המתאימה" onClick={() => openAttachment(a.id)}>פתח</button>
+              <button type="button" style={S.fileAct} title="הצג בתיקייה" onClick={() => revealAttachment(a.id)}>📂</button>
+            </>
+          ) : (
+            <button type="button" style={S.fileAct} title="הורד" onClick={() => download(a)}>⬇ הורד</button>
+          )}
           <button type="button" style={S.fileX} onClick={() => remove(a.id)} aria-label="הסר">×</button>
         </div>
       ))}
