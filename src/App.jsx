@@ -6,6 +6,7 @@ import {
 } from "./lib/constants.js";
 import SwipeRow from "./components/SwipeRow.jsx";
 import { loadJSON, saveJSON } from "./lib/storage.js";
+import * as excelWeb from "./lib/excelWeb.js";
 import { useEscape } from "./lib/useEscape.js";
 import { S, CSS, MUTED, GOLD } from "./lib/styles.js";
 import TaskModal from "./components/TaskModal.jsx";
@@ -57,6 +58,8 @@ export default function App() {
   const [showPanel, setShowPanel] = useState(false);
   const [undo, setUndo] = useState(null);
   const importRef = useRef(null);
+  const excelRef = useRef(null);
+  const [excelImport, setExcelImport] = useState(null); // { tasks, procurement } pending replace/merge choice
   const undoTimer = useRef(null);
   const undoRef = useRef(null);
   useEffect(() => { undoRef.current = undo; }, [undo]);
@@ -270,6 +273,44 @@ export default function App() {
     reader.readAsText(file);
   }
 
+  // ---------- Excel (web) ----------
+  function exportExcelWeb() {
+    excelWeb.exportXlsx({ tasks, procurement: proc, projectName }).catch((e) => alert("ייצוא נכשל: " + e.message));
+  }
+  function downloadTemplateWeb() {
+    excelWeb.templateXlsx({ assemblies: Object.keys(assemblies), members: members.map((m) => m.name), projectName })
+      .catch((e) => alert("הורדת התבנית נכשלה: " + e.message));
+  }
+  async function importExcelWebFile(file) {
+    let data;
+    try { data = await excelWeb.importXlsx(file); }
+    catch (e) { alert("הייבוא נכשל: " + e.message); return; }
+    if (!data.tasks.length && !data.procurement.length) { alert('לא נמצאו שורות לייבוא. ודאו שהקובץ תואם לתבנית (גיליון "משימות").'); return; }
+    setExcelImport(data); // open the replace/merge choice modal
+  }
+  function applyExcelImport(replace) {
+    const data = excelImport;
+    if (!data) return;
+    const existingTasks = replace ? [] : tasks;
+    let tid = Math.max(0, ...existingTasks.map((t) => t.id || 0)) + 1;
+    const newTasks = data.tasks.map((t) => ({
+      id: tid++, asm: t.asm || "", task: t.task, pri: t.pri, status: t.status,
+      who: t.who || "", ctrl: t.ctrl || "", due: t.due || "", notes: t.notes || "",
+      tags: t.tags || [], checklist: [], comments: [], attachments: [],
+    }));
+    setTasks([...existingTasks, ...newTasks]);
+    const existingProc = replace ? [] : proc;
+    let pid = Math.max(0, ...existingProc.map((p) => p.id || 0)) + 1;
+    setProc([...existingProc, ...data.procurement.map((p) => ({ id: pid++, ...p }))]);
+    setAssemblies((prev) => {
+      const next = { ...prev };
+      for (const t of newTasks) { const a = (t.asm || "").trim(); if (a && !next[a]) next[a] = MEMBER_PALETTE[Object.keys(next).length % MEMBER_PALETTE.length]; }
+      return next;
+    });
+    record(replace ? "יובא מ-Excel (החלפה)" : "יובא מ-Excel (הוספה)", `${newTasks.length} משימות · ${data.procurement.length} רכש`);
+    setExcelImport(null);
+  }
+
   // ---------- status report document (for management) ----------
   // A periodic, presentation-ready status doc covering ALL statuses:
   // blockers (תקוע) first, then in-progress, in-review, completed.
@@ -408,6 +449,8 @@ export default function App() {
           </div>
           <input style={S.search} value={query} placeholder="חיפוש…"
             onChange={(e) => setQuery(e.target.value)} />
+          <input ref={excelRef} type="file" accept=".xlsx" hidden
+            onChange={(e) => { if (e.target.files[0]) importExcelWebFile(e.target.files[0]); e.target.value = ""; }} />
           <input ref={importRef} type="file" accept="application/json" hidden
             onChange={(e) => { if (e.target.files[0]) importBackup(e.target.files[0]); e.target.value = ""; }} />
         </div>
@@ -482,14 +525,44 @@ export default function App() {
           onOpenLog={() => { setShowPanel(false); setShowLog(true); }}
           onExport={exportBackup}
           onImport={() => importRef.current?.click()}
+          onExcelExport={() => { setShowPanel(false); exportExcelWeb(); }}
+          onExcelImport={() => { setShowPanel(false); excelRef.current?.click(); }}
+          onExcelTemplate={() => { setShowPanel(false); downloadTemplateWeb(); }}
           onClose={() => setShowPanel(false)} />
+      )}
+      {excelImport && (
+        <ImportChoiceModal data={excelImport}
+          onReplace={() => applyExcelImport(true)} onMerge={() => applyExcelImport(false)}
+          onCancel={() => setExcelImport(null)} />
       )}
     </div>
   );
 }
 
+function ImportChoiceModal({ data, onReplace, onMerge, onCancel }) {
+  useEscape(onCancel);
+  return (
+    <div style={S.scrim} onClick={(e) => e.target === e.currentTarget && onCancel()}>
+      <div style={{ ...S.modal, maxWidth: 420 }}>
+        <button style={S.close} onClick={onCancel} aria-label="סגור">×</button>
+        <h2 style={S.modalTitle}>ייבוא מ-Excel</h2>
+        <div style={{ fontSize: 13.5, color: "#C9D4E0", lineHeight: 1.6, marginBottom: 16 }}>
+          נמצאו <b style={{ color: GOLD }}>{data.tasks.length}</b> משימות ו-<b style={{ color: GOLD }}>{data.procurement.length}</b> פריטי רכש.
+          <br />כיצד לייבא?
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button style={S.primaryBtn} onClick={onReplace}>החלף הכל</button>
+          <button style={{ ...S.panelBtn, justifyContent: "center", marginBottom: 0 }} onClick={onMerge}>הוסף לקיים</button>
+          <button style={{ ...S.panelBtn, justifyContent: "center", marginBottom: 0, color: MUTED }} onClick={onCancel}>ביטול</button>
+        </div>
+        <div style={{ fontSize: 11.5, color: MUTED, marginTop: 12 }}>"החלף הכל" ימחק את הנתונים הקיימים ויטען מחדש מהאקסל.</div>
+      </div>
+    </div>
+  );
+}
+
 // ============================== sub-components ==============================
-function SidePanel({ counts, total, members, onDevSummary, onOpenLog, onExport, onImport, onClose }) {
+function SidePanel({ counts, total, members, onDevSummary, onOpenLog, onExport, onImport, onExcelExport, onExcelImport, onExcelTemplate, onClose }) {
   useEscape(onClose);
   return (
     <>
@@ -532,6 +605,22 @@ function SidePanel({ counts, total, members, onDevSummary, onOpenLog, onExport, 
           <button style={S.panelBtn} onClick={onImport}>
             <span style={S.panelBtnIcon}>⬆️</span>
             <span>ייבוא גיבוי (JSON)<div style={S.panelBtnSub}>שחזור מקובץ גיבוי</div></span>
+          </button>
+        </div>
+
+        <div style={S.panelSection}>
+          <div style={S.panelTitle}>Excel</div>
+          <button style={S.panelBtn} onClick={onExcelImport}>
+            <span style={S.panelBtnIcon}>📥</span>
+            <span>ייבוא מ-Excel<div style={S.panelBtnSub}>טעינת משימות ורכש מקובץ (החלפה / הוספה)</div></span>
+          </button>
+          <button style={S.panelBtn} onClick={onExcelExport}>
+            <span style={S.panelBtnIcon}>📊</span>
+            <span>ייצוא ל-Excel<div style={S.panelBtnSub}>טבלת משימות + בקרת רכש</div></span>
+          </button>
+          <button style={S.panelBtn} onClick={onExcelTemplate}>
+            <span style={S.panelBtnIcon}>📋</span>
+            <span>הורד תבנית Excel<div style={S.panelBtnSub}>תבנית ריקה למילוי וייבוא</div></span>
           </button>
         </div>
 

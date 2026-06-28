@@ -1,6 +1,6 @@
 {
   "name": "mission-control-desktop",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Mission Control — local Windows desktop app (Electron + SQLite)",
   "main": "main.js",
   "author": "Mission Control",
