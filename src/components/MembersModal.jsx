@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { S, MUTED } from "../lib/styles.js";
 import { MEMBER_PALETTE, initials } from "../lib/constants.js";
 import { useEscape } from "../lib/useEscape.js";
@@ -9,6 +9,7 @@ const uid = () => "m_" + Date.now().toString(36) + Math.random().toString(36).sl
 // `taskCounts` maps member name -> number of tasks assigned (for safety on delete).
 export default function MembersModal({ members, taskCounts, onChange, onClose }) {
   const [newName, setNewName] = useState("");
+  const renameFrom = useRef(null);
   useEscape(onClose);
 
   function add() {
@@ -20,8 +21,17 @@ export default function MembersModal({ members, taskCounts, onChange, onClose })
     setNewName("");
   }
 
+  // Update the name as the user types (no task re-tag); commit the rename on
+  // blur so tasks are re-tagged once with the correct from→to.
   function rename(id, name) {
     onChange(members.map((m) => (m.id === id ? { ...m, name } : m)));
+  }
+  function commitRename(id, to) {
+    const from = renameFrom.current;
+    renameFrom.current = null;
+    const t = to.trim();
+    if (from == null || !t || t === from) return;
+    onChange(members.map((m) => (m.id === id ? { ...m, name: t } : m)), { type: "rename", from, to: t });
   }
 
   function toggleController(id) {
@@ -53,7 +63,9 @@ export default function MembersModal({ members, taskCounts, onChange, onClose })
             <span style={{ ...S.swatch, background: m.color }} onClick={() => recolor(m.id)} title="שנה צבע" />
             <span style={{ ...S.ava, background: m.color, color: "#0D1117" }}>{initials(m.name)}</span>
             <input style={S.memberName} value={m.name}
-              onChange={(e) => rename(m.id, e.target.value)} />
+              onFocus={() => { renameFrom.current = m.name; }}
+              onChange={(e) => rename(m.id, e.target.value)}
+              onBlur={(e) => commitRename(m.id, e.target.value)} />
             <button
               style={{ ...S.ctrlToggle, ...(m.isController ? S.ctrlToggleOn : {}) }}
               onClick={() => toggleController(m.id)}
