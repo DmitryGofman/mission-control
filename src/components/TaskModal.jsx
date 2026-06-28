@@ -158,7 +158,7 @@ export default function TaskModal({ task, members, assemblies = {}, tagSuggestio
 
   function save() {
     if (!draft.task.trim()) { alert("יש להזין שם משימה."); return; }
-    onSave({ ...draft, task: draft.task.trim(), who: draft.who || memberNames[0] || "" });
+    onSave({ ...draft, task: draft.task.trim() });
   }
 
   return (
@@ -185,7 +185,11 @@ export default function TaskModal({ task, members, assemblies = {}, tagSuggestio
             <Select value={draft.pri} options={Object.keys(PRIORITIES)} onChange={(v) => set("pri", v)} color={PRIORITIES[draft.pri]} />
           </Field>
           <Field label="מי מבצע">
-            <Select value={draft.who} options={whoOptions} onChange={(v) => set("who", v)} />
+            <select value={draft.who} onChange={(e) => set("who", e.target.value)}
+              style={{ ...S.modalInput, fontWeight: 700, cursor: "pointer", color: draft.who ? "#E6EDF3" : "#8B97A8" }}>
+              <option value="">— ללא משויך —</option>
+              {whoOptions.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
           </Field>
           <Field label="בקר">
             <select value={draft.ctrl} onChange={(e) => set("ctrl", e.target.value)}

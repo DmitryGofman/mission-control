@@ -10,7 +10,7 @@ const { exportXlsx, importXlsx, templateXlsx } = require("./excel");
 // our data lives in SQLite (not the session), so nothing is lost.
 const PARTITION = "persist:mc";
 
-const KEYS = { tasks: "mc:tasks:v2", members: "mc:members:v2", proc: "mc:procurement:v2", log: "mc:auditlog:v2", asm: "mc:assemblies:v1" };
+const KEYS = { tasks: "mc:tasks:v2", members: "mc:members:v2", proc: "mc:procurement:v2", log: "mc:auditlog:v2", asm: "mc:assemblies:v1", project: "mc:project:v1" };
 const ASM_PALETTE = ["#E8B84B", "#58A6FF", "#3FB950", "#F778BA", "#BC8CFF", "#F0883E", "#56D4DD", "#DB6D28", "#A5D6A7", "#FF7B72"];
 
 let linkedXlsx = null;
@@ -27,6 +27,7 @@ function baseDir() {
 const today = () => new Date().toISOString().slice(0, 10);
 const readArr = (key) => { try { return JSON.parse(store.getItem(key) || "[]"); } catch { return []; } };
 const readObj = (key) => { try { return JSON.parse(store.getItem(key) || "{}"); } catch { return {}; } };
+const readStr = (key) => { try { const v = JSON.parse(store.getItem(key) || '""'); return typeof v === "string" ? v : ""; } catch { return ""; } };
 
 // ---------- linked Excel auto-sync ----------
 function syncLinkedExcel() {
@@ -57,7 +58,12 @@ async function exportBackup(win) {
     filters: [{ name: "JSON", extensions: ["json"] }],
   });
   if (canceled || !filePath) return;
-  const data = { tasks: readArr(KEYS.tasks), members: readArr(KEYS.members), proc: readArr(KEYS.proc), log: readArr(KEYS.log), exportedAt: new Date().toISOString() };
+  const data = {
+    v: 2,
+    tasks: readArr(KEYS.tasks), members: readArr(KEYS.members), proc: readArr(KEYS.proc), log: readArr(KEYS.log),
+    assemblies: readObj(KEYS.asm), projectName: readStr(KEYS.project),
+    exportedAt: new Date().toISOString(),
+  };
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
   shell.showItemInFolder(filePath);
 }
@@ -129,7 +135,7 @@ async function importExcel(win) {
 // ---------- linked Excel menu ----------
 async function linkExcel(win) {
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: "קישור קובץ Excel לעדכון אוטומטי",
+    title: "ייצוא חי לאקסל (חד-כיווני)",
     defaultPath: linkedXlsx || `מרכז-משימות-חי.xlsx`,
     filters: [{ name: "Excel", extensions: ["xlsx"] }],
   });
@@ -138,7 +144,10 @@ async function linkExcel(win) {
   store.setConfig("linkedXlsx", filePath);
   await syncLinkedExcel();
   rebuildMenu(win);
-  dialog.showMessageBox(win, { type: "info", message: "קובץ Excel מקושר", detail: `מעתה הקובץ יתעדכן אוטומטית אחרי כל שינוי:\n${filePath}` });
+  dialog.showMessageBox(win, {
+    type: "info", message: "ייצוא חי לאקסל הופעל",
+    detail: `הקובץ ייכתב מחדש אוטומטית אחרי כל שינוי באפליקציה:\n${filePath}\n\n⚠ חד-כיווני בלבד: עריכות שתבצעו ישירות בקובץ ה-Excel ידרסו בשינוי הבא. לעריכה — השתמשו באפליקציה, או בייבוא מ-Excel.`,
+  });
 }
 function unlinkExcel(win) {
   linkedXlsx = null;
@@ -160,8 +169,8 @@ function buildMenu(win) {
         { label: "ייצוא גיבוי (JSON)…", click: () => exportBackup(win) },
         { type: "separator" },
         linkedXlsx
-          ? { label: `נתק Excel מקושר  (${path.basename(linkedXlsx)})`, click: () => unlinkExcel(win) }
-          : { label: "קשר Excel לעדכון אוטומטי…", click: () => linkExcel(win) },
+          ? { label: `נתק ייצוא חי לאקסל  (${path.basename(linkedXlsx)})`, click: () => unlinkExcel(win) }
+          : { label: "ייצוא חי לאקסל (חד-כיווני)…", click: () => linkExcel(win) },
         { type: "separator" },
         { label: "פתח תיקיית נתונים", click: () => shell.showItemInFolder(store.getDbPath()) },
         { type: "separator" },

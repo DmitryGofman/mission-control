@@ -21,6 +21,7 @@ const FIELD_LABELS = {
   attachments: "קבצים", checklist: "תת-משימות", tags: "תוויות", comments: "תגובות",
 };
 const ARRAY_FIELDS = new Set(["attachments", "checklist", "tags", "comments"]);
+const UNASSIGNED = "— ללא משויך —"; // by-person filter option for tasks with no/unknown assignee
 
 // Is a "DD.M.YY" due date in the past?
 function isOverdue(due) {
@@ -207,6 +208,14 @@ export default function App() {
     setMembers(next);
     if (evt?.type === "add") record("נוסף חבר צוות", evt.name);
     if (evt?.type === "remove") record("הוסר חבר צוות", evt.name);
+    if (evt?.type === "rename") {
+      setTasks((prev) => prev.map((t) => ({
+        ...t,
+        who: t.who === evt.from ? evt.to : t.who,
+        ctrl: t.ctrl === evt.from ? evt.to : t.ctrl,
+      })));
+      record("שונה חבר צוות", `"${evt.from}" → "${evt.to}"`);
+    }
   }
 
   // ---------- procurement ----------
@@ -233,26 +242,30 @@ export default function App() {
 
   // ---------- backup ----------
   function exportBackup() {
-    const blob = new Blob([JSON.stringify({ tasks, members, proc, log, exportedAt: new Date().toISOString() }, null, 2)],
-      { type: "application/json" });
+    const payload = { v: 2, tasks, members, proc, log, assemblies, projectName, exportedAt: new Date().toISOString() };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `mission-control-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    const safe = (projectName || "mission-control").trim().replace(/[\\/:*?"<>|]/g, "-");
+    a.href = url; a.download = `${safe}-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click(); URL.revokeObjectURL(url);
   }
 
   function importBackup(file) {
     const reader = new FileReader();
     reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result);
-        if (Array.isArray(data.tasks)) setTasks(data.tasks.map((x) => ({ attachments: [], comments: [], checklist: [], tags: [], ...x })));
-        if (Array.isArray(data.members)) setMembers(data.members);
-        if (Array.isArray(data.proc)) setProc(data.proc);
-        if (Array.isArray(data.log)) setLog(data.log);
-        record("יובא גיבוי", `${data.tasks?.length || 0} משימות`);
-        alert("הגיבוי יובא. שים לב: קבצים/תמונות מצורפים אינם כלולים בגיבוי טקסט זה.");
-      } catch { alert("קובץ גיבוי לא תקין."); }
+      let data;
+      try { data = JSON.parse(reader.result); } catch { alert("קובץ גיבוי לא תקין."); return; }
+      if (!Array.isArray(data.tasks) && !Array.isArray(data.members)) { alert("קובץ גיבוי לא תקין."); return; }
+      if (!confirm("ייבוא הגיבוי יחליף את כל הנתונים הקיימים בפרויקט זה. להמשיך?")) return;
+      if (Array.isArray(data.tasks)) setTasks(data.tasks.map((x) => ({ attachments: [], comments: [], checklist: [], tags: [], ...x })));
+      if (Array.isArray(data.members)) setMembers(data.members.map((x) => ({ isController: false, ...x })));
+      if (Array.isArray(data.proc)) setProc(data.proc);
+      if (Array.isArray(data.log)) setLog(data.log);
+      if (data.assemblies && typeof data.assemblies === "object") setAssemblies(data.assemblies);
+      if (typeof data.projectName === "string") setProjectName(data.projectName);
+      record("יובא גיבוי", `${data.tasks?.length || 0} משימות`);
+      alert("הגיבוי יובא. שים לב: קבצים/תמונות מצורפים אינם כלולים בגיבוי טקסט זה.");
     };
     reader.readAsText(file);
   }
@@ -409,8 +422,9 @@ export default function App() {
           )}
 
           {view === "people" && (
-            <FilterView label="איש צוות" options={memberNames} value={filterPerson} onChange={setFilterPerson}
-              items={filtered.filter((t) => t.who === filterPerson)} members={members} assemblies={assemblies}
+            <FilterView label="איש צוות" options={[...memberNames, UNASSIGNED]} value={filterPerson} onChange={setFilterPerson}
+              items={filtered.filter((t) => filterPerson === UNASSIGNED ? (!t.who || !memberNames.includes(t.who)) : t.who === filterPerson)}
+              members={members} assemblies={assemblies}
               onPick={setEditing} onComplete={agendaComplete} onPostpone={onPostpone} onMove={moveTaskStatus} />
           )}
           {view === "asm" && (
