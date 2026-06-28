@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS procurement (
 );
 CREATE TABLE IF NOT EXISTS audit_log (seq INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, action TEXT, detail TEXT);
 CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY, type TEXT, data BLOB);
+CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 `;
 
 async function init(targetPath) {
@@ -69,7 +70,11 @@ function rowsToObjects(res) {
 function getItem(key) {
   if (getMeta("init") !== "1") return null;
   const table = tableFor(key);
-  if (!table) return null;
+  if (!table) {
+    // Generic key/value (e.g. the מכלול list) — stored as JSON in `kv`.
+    const r = db.exec("SELECT v FROM kv WHERE k=?", [key]);
+    return r.length ? r[0].values[0][0] : null;
+  }
   if (table === "audit_log") {
     const objs = rowsToObjects(db.exec("SELECT ts,action,detail FROM audit_log ORDER BY seq"));
     return JSON.stringify(objs);
@@ -92,7 +97,12 @@ function getItem(key) {
 // Mirrors localStorage.setItem: replaces the table contents from the JSON array.
 function setItem(key, json) {
   const table = tableFor(key);
-  if (!table) return;
+  if (!table) {
+    db.run("INSERT OR REPLACE INTO kv(k,v) VALUES(?,?)", [key, json]);
+    setMeta("init", "1");
+    persist();
+    return;
+  }
   const arr = JSON.parse(json);
   db.run("BEGIN");
   db.run(`DELETE FROM ${table}`);
@@ -134,4 +144,12 @@ function deleteBlob(id) {
   persist();
 }
 
-module.exports = { init, getItem, setItem, putBlob, getBlob, deleteBlob, persist, getDbPath: () => dbPath };
+// App config (e.g. the linked-Excel path) stored in the meta table.
+function getConfig(key) { return getMeta("cfg:" + key); }
+function setConfig(key, value) {
+  if (value == null) db.run("DELETE FROM meta WHERE k=?", ["cfg:" + key]);
+  else setMeta("cfg:" + key, String(value));
+  persist();
+}
+
+module.exports = { init, getItem, setItem, putBlob, getBlob, deleteBlob, persist, getConfig, setConfig, getDbPath: () => dbPath };

@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  STATUSES, STATUS_ORDER, ASSEMBLIES, PRIORITIES, SEED, DEFAULT_MEMBERS,
-  PROC_STATUSES, PROC_STATUS_ORDER, PROC_SEED, STORE, readable, initials, tagColor,
+  STATUSES, STATUS_ORDER, ASSEMBLIES, PRIORITIES, SEED, DEFAULT_MEMBERS, MEMBER_PALETTE,
+  PROC_STATUSES, PROC_STATUS_ORDER, PROC_SEED, STORE, readable, initials, tagColor, asmColor,
 } from "./lib/constants.js";
 import { loadJSON, saveJSON } from "./lib/storage.js";
 import { useEscape } from "./lib/useEscape.js";
 import { S, CSS, MUTED, GOLD } from "./lib/styles.js";
 import TaskModal from "./components/TaskModal.jsx";
 import MembersModal from "./components/MembersModal.jsx";
+import AssembliesModal from "./components/AssembliesModal.jsx";
 import ProcurementModal from "./components/ProcurementModal.jsx";
 import AgendaView from "./components/AgendaView.jsx";
 
@@ -36,31 +37,53 @@ export default function App() {
   const [members, setMembers] = useState([]);
   const [proc, setProc] = useState([]);
   const [log, setLog] = useState([]);
+  const [assemblies, setAssemblies] = useState({});
   const [loaded, setLoaded] = useState(false);
 
   const [view, setView] = useState("board");
   const [query, setQuery] = useState("");
   const [filterPerson, setFilterPerson] = useState("");
-  const [filterAsm, setFilterAsm] = useState(Object.keys(ASSEMBLIES)[1]);
+  const [filterAsm, setFilterAsm] = useState("");
 
   const [editing, setEditing] = useState(undefined); // undefined=closed, null=add, task=edit
   const [editingProc, setEditingProc] = useState(undefined);
   const [showMembers, setShowMembers] = useState(false);
+  const [showAssemblies, setShowAssemblies] = useState(false);
   const [showLog, setShowLog] = useState(false);
   const [showPanel, setShowPanel] = useState(false);
   const [undo, setUndo] = useState(null);
   const importRef = useRef(null);
   const undoTimer = useRef(null);
+  const undoRef = useRef(null);
+  useEffect(() => { undoRef.current = undo; }, [undo]);
+
+  // Ctrl/Cmd+Z triggers the pending undo (unless typing in a field, where the
+  // browser's native text-undo should win).
+  useEffect(() => {
+    function onKey(e) {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+        const el = e.target;
+        const tag = (el?.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select" || el?.isContentEditable) return;
+        if (undoRef.current) { e.preventDefault(); doUndo(); }
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // ---------- load / persist ----------
   useEffect(() => {
     const t = loadJSON(STORE.tasks, SEED);
     const m = loadJSON(STORE.members, DEFAULT_MEMBERS);
+    const asm = loadJSON(STORE.assemblies, ASSEMBLIES);
     setTasks(t.map((x) => ({ attachments: [], comments: [], checklist: [], tags: [], ...x })));
     setMembers(m.map((x) => ({ isController: false, ...x })));
     setProc(loadJSON(STORE.procurement, PROC_SEED));
     setLog(loadJSON(STORE.audit, []));
+    setAssemblies(asm);
     setFilterPerson(m[0]?.name || "");
+    setFilterAsm(Object.keys(asm)[1] || Object.keys(asm)[0] || "");
     setLoaded(true);
   }, []);
 
@@ -68,14 +91,38 @@ export default function App() {
   useEffect(() => { if (loaded) saveJSON(STORE.members, members); }, [members, loaded]);
   useEffect(() => { if (loaded) saveJSON(STORE.procurement, proc); }, [proc, loaded]);
   useEffect(() => { if (loaded) saveJSON(STORE.audit, log); }, [log, loaded]);
+  useEffect(() => { if (loaded) saveJSON(STORE.assemblies, assemblies); }, [assemblies, loaded]);
 
   // ---------- audit ----------
   function record(action, detail) {
     setLog((l) => [{ ts: new Date().toISOString(), action, detail }, ...l].slice(0, 500));
   }
 
+  // ---------- assemblies (מכלול) ----------
+  // Ensure an assembly name exists in the managed list, assigning a color.
+  function ensureAssembly(name) {
+    const n = (name || "").trim();
+    if (!n) return;
+    setAssemblies((prev) => {
+      if (prev[n]) return prev;
+      const color = MEMBER_PALETTE[Object.keys(prev).length % MEMBER_PALETTE.length];
+      record("נוסף מכלול", n);
+      return { ...prev, [n]: color };
+    });
+  }
+  function changeAssemblies(next, evt) {
+    setAssemblies(next);
+    if (evt?.type === "add") record("נוסף מכלול", evt.name);
+    if (evt?.type === "remove") record("הוסר מכלול", evt.name);
+    if (evt?.type === "rename") {
+      setTasks((prev) => prev.map((t) => (t.asm === evt.from ? { ...t, asm: evt.to } : t)));
+      record("שונה מכלול", `"${evt.from}" → "${evt.to}"`);
+    }
+  }
+
   // ---------- task CRUD ----------
   function saveTask(draft) {
+    if (draft.asm) ensureAssembly(draft.asm);
     if (draft.id == null) {
       const id = Math.max(0, ...tasks.map((t) => t.id)) + 1;
       const task = { id, ...draft };
@@ -102,6 +149,11 @@ export default function App() {
     setTasks((prev) => prev.filter((t) => t.id !== task.id));
     record("נמחקה משימה", `"${task.task}"`);
     setEditing(undefined);
+    // Re-add the exact task (keeps attachments/comments/etc.) on undo.
+    showUndo(`"${task.task}" נמחקה`, () => {
+      setTasks((prev) => (prev.some((t) => t.id === task.id) ? prev : [...prev, task]));
+      record("שוחזרה משימה", `"${task.task}"`);
+    });
   }
 
   // Lightweight field patch (used by the agenda quick-actions).
@@ -110,27 +162,31 @@ export default function App() {
     if (detail) record("עודכנה משימה", detail);
   }
 
-  // Agenda quick-actions show an undo snackbar (swipes are easy to trigger by
-  // accident). `prev` is the task as it was before the change, so undo restores it.
-  function showUndo(msg, prev) {
-    setUndo({ msg, prev });
+  // Undo snackbar (also triggered by Ctrl+Z). `restore` is a closure that
+  // reverts the action — works for edits, completes, reschedules and deletes.
+  function showUndo(msg, restore) {
+    setUndo({ msg, restore });
     clearTimeout(undoTimer.current);
-    undoTimer.current = setTimeout(() => setUndo(null), 6000);
+    undoTimer.current = setTimeout(() => setUndo(null), 7000);
   }
   function doUndo() {
-    if (!undo) return;
-    setTasks((prevTasks) => prevTasks.map((t) => (t.id === undo.prev.id ? undo.prev : t)));
-    record("בוטל שינוי", `"${undo.prev.task}"`);
+    const u = undoRef.current;
+    if (!u) return;
+    u.restore();
     clearTimeout(undoTimer.current);
     setUndo(null);
   }
+  const restoreTask = (t) => () => {
+    setTasks((prev) => prev.map((x) => (x.id === t.id ? t : x)));
+    record("בוטל שינוי", `"${t.task}"`);
+  };
   function agendaComplete(t) {
     patchTask(t.id, { status: "בוצע" }, `"${t.task}" · הושלמה`);
-    showUndo(`"${t.task}" — הושלמה`, t);
+    showUndo(`"${t.task}" — הושלמה`, restoreTask(t));
   }
   function agendaReschedule(t, due) {
     patchTask(t.id, { due }, `"${t.task}" · תג״ב → ${due || "—"}`);
-    showUndo(`"${t.task}" — תג״ב ${due || "הוסר"}`, t);
+    showUndo(`"${t.task}" — תג״ב ${due || "הוסר"}`, restoreTask(t));
   }
 
   // ---------- members ----------
@@ -204,9 +260,9 @@ export default function App() {
       const overdue = isOverdue(t.due) && status !== "בוצע";
       const chk = t.checklist?.length ? ` · תת-משימות: ${t.checklist.filter((c) => c.done).length}/${t.checklist.length}` : "";
       const tags = t.tags?.length ? `<div class="tags">${t.tags.map((x) => `<span class="tag">${esc(x)}</span>`).join("")}</div>` : "";
-      const asmColor = ASSEMBLIES[t.asm] || "#5A6573";
+      const ac = asmColor(assemblies, t.asm);
       return `<div class="task">
-        <div class="row1"><span class="asm" style="background:${asmColor};color:${readable(asmColor)}">${esc(t.asm)}</span><span class="ttl">${esc(t.task)}</span></div>
+        <div class="row1"><span class="asm" style="background:${ac};color:${readable(ac)}">${esc(t.asm)}</span><span class="ttl">${esc(t.task)}</span></div>
         <div class="meta">מבצע: <b>${esc(t.who || "—")}</b>${t.ctrl ? ` · בקר: ${esc(t.ctrl)}` : ""}${t.due ? ` · תג״ב: <span class="${overdue ? "od" : ""}">${esc(t.due)}${overdue ? " ⚠" : ""}</span>` : ""}${chk}</div>
         ${t.notes ? `<div class="notes">${esc(t.notes)}</div>` : ""}
         ${tags}
@@ -307,6 +363,7 @@ export default function App() {
           </div>
           <div style={S.headRight}>
             <button style={S.ghostBtn} onClick={() => setShowMembers(true)}>👥 צוות</button>
+            <button style={S.ghostBtn} onClick={() => setShowAssemblies(true)}>🧩 מכלולים</button>
             <button style={S.iconBtn} onClick={() => setShowPanel(true)} aria-label="סיכום ואפשרויות" title="סיכום ואפשרויות">⋮</button>
           </div>
         </div>
@@ -337,7 +394,7 @@ export default function App() {
                       <span style={{ ...S.dot, background: STATUSES[s].color, boxShadow: `0 0 8px ${STATUSES[s].glow}` }} />
                       {s}<span style={S.cnt}>{items.length}</span>
                     </div>
-                    {items.map((t) => <Card key={t.id} t={t} members={members} onClick={() => setEditing(t)} />)}
+                    {items.map((t) => <Card key={t.id} t={t} members={members} assemblies={assemblies} onClick={() => setEditing(t)} />)}
                     {!items.length && <div style={S.empty}>—</div>}
                   </div>
                 );
@@ -347,14 +404,14 @@ export default function App() {
 
           {view === "people" && (
             <FilterView label="איש צוות" options={memberNames} value={filterPerson} onChange={setFilterPerson}
-              items={filtered.filter((t) => t.who === filterPerson)} members={members} onPick={setEditing} />
+              items={filtered.filter((t) => t.who === filterPerson)} members={members} assemblies={assemblies} onPick={setEditing} />
           )}
           {view === "asm" && (
-            <FilterView label="מכלול" options={Object.keys(ASSEMBLIES)} value={filterAsm} onChange={setFilterAsm}
-              items={filtered.filter((t) => t.asm === filterAsm)} members={members} onPick={setEditing} colorMap={ASSEMBLIES} />
+            <FilterView label="מכלול" options={Object.keys(assemblies)} value={filterAsm} onChange={setFilterAsm}
+              items={filtered.filter((t) => t.asm === filterAsm)} members={members} assemblies={assemblies} onPick={setEditing} colorMap={assemblies} />
           )}
           {view === "agenda" && (
-            <AgendaView tasks={filtered} members={members} onPick={setEditing}
+            <AgendaView tasks={filtered} members={members} assemblies={assemblies} onPick={setEditing}
               onComplete={agendaComplete} onReschedule={agendaReschedule} />
           )}
           {view === "proc" && <ProcurementView rows={proc} query={query} onPick={setEditingProc} />}
@@ -374,7 +431,7 @@ export default function App() {
 
       {/* modals */}
       {editing !== undefined && (
-        <TaskModal task={editing} members={members} tagSuggestions={tagSuggestions}
+        <TaskModal task={editing} members={members} assemblies={assemblies} tagSuggestions={tagSuggestions}
           onSave={saveTask} onDelete={deleteTask} onClose={() => setEditing(undefined)} />
       )}
       {editingProc !== undefined && (
@@ -384,6 +441,10 @@ export default function App() {
       {showMembers && (
         <MembersModal members={members} taskCounts={taskCounts}
           onChange={changeMembers} onClose={() => setShowMembers(false)} />
+      )}
+      {showAssemblies && (
+        <AssembliesModal assemblies={assemblies} tasks={tasks}
+          onChange={changeAssemblies} onClose={() => setShowAssemblies(false)} />
       )}
       {undo && (
         <div style={S.snackbar} className="snackbar-in">
@@ -464,7 +525,8 @@ function memberColor(members, name) {
   return members.find((m) => m.name === name)?.color || GOLD;
 }
 
-function Card({ t, members, onClick }) {
+function Card({ t, members, assemblies, onClick }) {
+  const ac = asmColor(assemblies, t.asm);
   const att = t.attachments?.length || 0;
   const checks = t.checklist?.length || 0;
   const checksDone = (t.checklist || []).filter((c) => c.done).length;
@@ -482,7 +544,7 @@ function Card({ t, members, onClick }) {
         </div>
       )}
       <div style={S.cardMeta}>
-        <span style={{ ...S.asmPill, background: ASSEMBLIES[t.asm], color: readable(ASSEMBLIES[t.asm]) }}>{t.asm}</span>
+        <span style={{ ...S.asmPill, background: ac, color: readable(ac) }}>{t.asm}</span>
         <span style={{ ...S.ava, background: memberColor(members, t.who) }}>{initials(t.who)}</span>
         <span style={S.who}>{t.who}</span>
         {checks > 0 && <span style={S.clip}>✓ {checksDone}/{checks}</span>}
@@ -494,7 +556,7 @@ function Card({ t, members, onClick }) {
   );
 }
 
-function FilterView({ label, options, value, onChange, items, members, onPick, colorMap }) {
+function FilterView({ label, options, value, onChange, items, members, assemblies, onPick, colorMap }) {
   const stats = STATUS_ORDER.reduce((a, s) => ((a[s] = items.filter((t) => t.status === s).length), a), {});
   return (
     <div style={S.fv}>
@@ -517,7 +579,9 @@ function FilterView({ label, options, value, onChange, items, members, onPick, c
           return (
             <div key={t.id} style={S.qrow} className="card" onClick={() => onPick(t)}>
               <span style={{ ...S.qdot, background: STATUSES[t.status].color }} />
-              <span style={{ ...S.qAsm, background: (colorMap || ASSEMBLIES)[t.asm], color: readable((colorMap || ASSEMBLIES)[t.asm]) }}>{t.asm}</span>
+              {(() => { const c = asmColor(colorMap || assemblies, t.asm); return (
+              <span style={{ ...S.qAsm, background: c, color: readable(c) }}>{t.asm}</span>
+              ); })()}
               <span style={S.qTask}>{t.task}</span>
               {(t.attachments?.length || 0) > 0 && <span style={S.clip}>📎 {t.attachments.length}</span>}
               {t.due && <span style={{ ...S.qDue, ...(overdue ? S.overdue : {}) }}>{t.due}</span>}

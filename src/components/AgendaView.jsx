@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { S, MUTED, GOLD } from "../lib/styles.js";
 import {
-  STATUSES, ASSEMBLIES, PRIORITIES, readable, initials,
+  STATUSES, PRIORITIES, readable, initials, asmColor,
   dueToDate, dateToDue, startOfToday, addDays,
 } from "../lib/constants.js";
 
@@ -168,7 +168,7 @@ function Reschedule({ anchor, onPick, onClose }) {
   );
 }
 
-export default function AgendaView({ tasks, members, onPick, onComplete, onReschedule }) {
+export default function AgendaView({ tasks, members, assemblies = {}, onPick, onComplete, onReschedule }) {
   const [resched, setResched] = useState(null); // { task, rect }
   const today = startOfToday();
 
@@ -201,7 +201,9 @@ export default function AgendaView({ tasks, members, onPick, onComplete, onResch
                 onPostpone={() => onReschedule(t, dateToDue(addDays(today, 1)))}
                 onClick={() => onPick(t)}>
                 <span style={{ ...S.qdot, background: STATUSES[t.status].color }} />
-                <span style={{ ...S.qAsm, background: ASSEMBLIES[t.asm], color: readable(ASSEMBLIES[t.asm]) }}>{t.asm}</span>
+                {(() => { const c = asmColor(assemblies, t.asm); return (
+                <span style={{ ...S.qAsm, background: c, color: readable(c) }}>{t.asm}</span>
+                ); })()}
                 <span style={S.qTask}>{t.task}</span>
                 <span style={{ ...S.ava, width: 20, height: 20, background: memberColor(members, t.who) }}>{initials(t.who)}</span>
                 {t.due && <span style={{ ...S.qDue, color: g.key === "overdue" ? "#F85149" : MUTED, fontWeight: g.key === "overdue" ? 700 : 400 }}>{t.due}</span>}

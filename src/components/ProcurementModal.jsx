@@ -40,7 +40,7 @@ export default function ProcurementModal({ row, onSave, onDelete, onClose }) {
           <Field label="סטטוס">
             <select value={draft.status} onChange={(e) => set("status", e.target.value)}
               style={{ ...S.modalInput, fontWeight: 700, cursor: "pointer", color: PROC_STATUSES[draft.status] }}>
-              {PROC_STATUS_ORDER.map((o) => <option key={o} value={o} style={{ color: "#111" }}>{o}</option>)}
+              {PROC_STATUS_ORDER.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
           </Field>
           <Field label="תאריך הזמנה">

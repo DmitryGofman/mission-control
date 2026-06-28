@@ -203,7 +203,7 @@ body { margin: 0; }
 @keyframes blink { 0%,100%{opacity:.4} 50%{opacity:1} }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #283041; border-radius: 8px; }
-select option { background: #1B2230; }
+select option { background: #1B2230; color: #E6EDF3; }
 input[type=date] { color-scheme: dark; }
 input[type=date]::-webkit-calendar-picker-indicator { filter: invert(.8); opacity: .7; cursor: pointer; }
 input::placeholder, textarea::placeholder { color: #5A6373; }
