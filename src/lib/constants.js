@@ -10,11 +10,18 @@ export const STATUSES = {
 // Board column order (SPEC §5).
 export const STATUS_ORDER = ["בעבודה", "תקוע", "לבדיקה", "בוצע"];
 
+// Default מכלול list. This is now an editable, persisted list (see STORE.assemblies);
+// this object is just the seed/default.
 export const ASSEMBLIES = {
   "כללי": "#5A6573", "פרופיל אב": "#E8B84B", "Sbru": "#58A6FF",
   "אלקטרוני": "#3FB950", "תחנה קדמית": "#F778BA", "תחנה אחורית": "#BC8CFF",
   "פולו/פוקר": "#F0883E", "בומרנג": "#56D4DD", "בייסבול": "#DB6D28", "בלנדר": "#A5D6A7",
 };
+
+// Color for an assembly name, falling back to a neutral gray for unknown ones.
+export function asmColor(assemblies, name) {
+  return (assemblies && assemblies[name]) || "#5A6573";
+}
 
 export const PRIORITIES = { "גבוה": "#FF7B72", "בינוני": "#E3B341", "נמוך": "#9AA5B1" };
 
@@ -65,6 +72,7 @@ export const STORE = {
   members: "mc:members:v2",
   audit: "mc:auditlog:v2",
   procurement: "mc:procurement:v2",
+  assemblies: "mc:assemblies:v1",
 };
 
 // Choose readable text color on a colored chip by luminance.

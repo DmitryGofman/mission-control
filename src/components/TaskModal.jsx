@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { S } from "../lib/styles.js";
-import { STATUSES, ASSEMBLIES, PRIORITIES, STATUS_ORDER, readable, initials, tagColor, dueToISO, isoToDue } from "../lib/constants.js";
+import { STATUSES, PRIORITIES, STATUS_ORDER, readable, initials, tagColor, asmColor, dueToISO, isoToDue } from "../lib/constants.js";
 import { useEscape } from "../lib/useEscape.js";
 import Attachments from "./Attachments.jsx";
 
@@ -12,13 +12,13 @@ function Select({ value, options, onChange, color }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)}
       style={{ ...S.modalInput, fontWeight: 700, color: color || "#E6EDF3", cursor: "pointer" }}>
-      {options.map((o) => <option key={o} value={o} style={{ color: "#111" }}>{o}</option>)}
+      {options.map((o) => <option key={o} value={o}>{o}</option>)}
     </select>
   );
 }
 
 const blankTask = () => ({
-  asm: Object.keys(ASSEMBLIES)[0], task: "", pri: "בינוני",
+  asm: "", task: "", pri: "בינוני",
   status: "בעבודה", who: "", ctrl: "", due: "", notes: "",
   attachments: [], comments: [], checklist: [], tags: [],
 });
@@ -125,7 +125,7 @@ function CommentThread({ comments, members, onChange }) {
       ))}
       <div style={S.commentInputRow}>
         <select style={S.commentSelect} value={author} onChange={(e) => setAuthor(e.target.value)}>
-          {memberNames.map((n) => <option key={n} value={n} style={{ color: "#111" }}>{n}</option>)}
+          {memberNames.map((n) => <option key={n} value={n}>{n}</option>)}
         </select>
         <input style={S.commentInput} value={text} placeholder="כתוב תגובה…"
           onChange={(e) => setText(e.target.value)}
@@ -137,13 +137,15 @@ function CommentThread({ comments, members, onChange }) {
 }
 
 // One component, two modes (SPEC §5): add mode when `task` is null.
-export default function TaskModal({ task, members, tagSuggestions = [], onSave, onDelete, onClose }) {
+export default function TaskModal({ task, members, assemblies = {}, tagSuggestions = [], onSave, onDelete, onClose }) {
   const isEdit = !!task;
-  const [draft, setDraft] = useState(() => (task ? { ...task } : blankTask()));
+  const asmNames = Object.keys(assemblies);
+  const [draft, setDraft] = useState(() => (task ? { ...task } : { ...blankTask(), asm: asmNames[0] || "" }));
   const [confirmDel, setConfirmDel] = useState(false);
   const set = (field, value) => setDraft((d) => ({ ...d, [field]: value }));
   useEscape(onClose);
 
+  const asmCol = asmColor(assemblies, draft.asm);
   const memberNames = members.map((m) => m.name);
   const whoOptions = memberNames.includes(draft.who) || !draft.who
     ? memberNames : [draft.who, ...memberNames];
@@ -163,8 +165,8 @@ export default function TaskModal({ task, members, tagSuggestions = [], onSave, 
     <div style={S.scrim} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={S.modal}>
         <button style={S.close} onClick={onClose} aria-label="סגור">×</button>
-        <div style={{ ...S.asmTag, background: ASSEMBLIES[draft.asm], color: readable(ASSEMBLIES[draft.asm]) }}>
-          {isEdit ? draft.asm : "משימה חדשה"}
+        <div style={{ ...S.asmTag, background: asmCol, color: readable(asmCol) }}>
+          {isEdit ? (draft.asm || "—") : "משימה חדשה"}
         </div>
 
         <input style={S.titleInput} value={draft.task} autoFocus={!isEdit}
@@ -172,7 +174,9 @@ export default function TaskModal({ task, members, tagSuggestions = [], onSave, 
 
         <div style={S.fields} className="mc-fields">
           <Field label="מכלול">
-            <Select value={draft.asm} options={Object.keys(ASSEMBLIES)} onChange={(v) => set("asm", v)} />
+            <input style={{ ...S.modalInput, fontWeight: 700, cursor: "text" }} value={draft.asm}
+              list="mc-asm" placeholder="בחר או הקלד חדש…" onChange={(e) => set("asm", e.target.value)} />
+            <datalist id="mc-asm">{asmNames.map((n) => <option key={n} value={n} />)}</datalist>
           </Field>
           <Field label="סטטוס">
             <Select value={draft.status} options={STATUS_ORDER} onChange={(v) => set("status", v)} color={STATUSES[draft.status].color} />
@@ -186,8 +190,8 @@ export default function TaskModal({ task, members, tagSuggestions = [], onSave, 
           <Field label="בקר">
             <select value={draft.ctrl} onChange={(e) => set("ctrl", e.target.value)}
               style={{ ...S.modalInput, fontWeight: 700, cursor: "pointer", color: draft.ctrl ? "#E6EDF3" : "#8B97A8" }}>
-              <option value="" style={{ color: "#111" }}>—</option>
-              {ctrlOptions.map((n) => <option key={n} value={n} style={{ color: "#111" }}>{n}</option>)}
+              <option value="">—</option>
+              {ctrlOptions.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </Field>
           <Field label="תג״ב">

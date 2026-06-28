@@ -2,7 +2,13 @@ const { app, BrowserWindow, ipcMain, Menu, shell, dialog, session } = require("e
 const fs = require("fs");
 const path = require("path");
 const store = require("./store");
-const { exportXlsx } = require("./excel");
+const { exportXlsx, importXlsx, templateXlsx } = require("./excel");
+
+const KEYS = { tasks: "mc:tasks:v2", members: "mc:members:v2", proc: "mc:procurement:v2", log: "mc:auditlog:v2", asm: "mc:assemblies:v1" };
+const ASM_PALETTE = ["#E8B84B", "#58A6FF", "#3FB950", "#F778BA", "#BC8CFF", "#F0883E", "#56D4DD", "#DB6D28", "#A5D6A7", "#FF7B72"];
+
+let linkedXlsx = null;
+let xlsxTimer = null;
 
 // Where the SQLite file lives: next to the (portable) executable when packaged,
 // so it sits "in the folder the app operates in"; the project folder in dev.
@@ -13,42 +19,143 @@ function baseDir() {
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
-const read = (key) => { try { return JSON.parse(store.getItem(key) || "[]"); } catch { return []; } };
+const readArr = (key) => { try { return JSON.parse(store.getItem(key) || "[]"); } catch { return []; } };
+const readObj = (key) => { try { return JSON.parse(store.getItem(key) || "{}"); } catch { return {}; } };
 
+// ---------- linked Excel auto-sync ----------
+function syncLinkedExcel() {
+  if (!linkedXlsx) return Promise.resolve();
+  return exportXlsx(linkedXlsx, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc) })
+    .catch((e) => console.error("excel sync failed:", e.message));
+}
+function scheduleXlsxSync() {
+  if (!linkedXlsx) return;
+  clearTimeout(xlsxTimer);
+  xlsxTimer = setTimeout(syncLinkedExcel, 800);
+}
+
+// ---------- exports ----------
 async function exportExcel(win) {
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: "ייצוא ל-Excel",
-    defaultPath: `מרכז-משימות-${today()}.xlsx`,
+    title: "ייצוא ל-Excel", defaultPath: `מרכז-משימות-${today()}.xlsx`,
     filters: [{ name: "Excel", extensions: ["xlsx"] }],
   });
   if (canceled || !filePath) return;
-  await exportXlsx(filePath, { tasks: read("mc:tasks:v2"), procurement: read("mc:procurement:v2") });
+  await exportXlsx(filePath, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc) });
   shell.showItemInFolder(filePath);
 }
 
 async function exportBackup(win) {
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: "ייצוא גיבוי (JSON)",
-    defaultPath: `mission-control-backup-${today()}.json`,
+    title: "ייצוא גיבוי (JSON)", defaultPath: `mission-control-backup-${today()}.json`,
     filters: [{ name: "JSON", extensions: ["json"] }],
   });
   if (canceled || !filePath) return;
-  const data = {
-    tasks: read("mc:tasks:v2"), members: read("mc:members:v2"),
-    proc: read("mc:procurement:v2"), log: read("mc:auditlog:v2"),
-    exportedAt: new Date().toISOString(),
-  };
+  const data = { tasks: readArr(KEYS.tasks), members: readArr(KEYS.members), proc: readArr(KEYS.proc), log: readArr(KEYS.log), exportedAt: new Date().toISOString() };
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
   shell.showItemInFolder(filePath);
 }
+
+async function downloadTemplate(win) {
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: "הורד תבנית Excel", defaultPath: `תבנית-מרכז-משימות.xlsx`,
+    filters: [{ name: "Excel", extensions: ["xlsx"] }],
+  });
+  if (canceled || !filePath) return;
+  await templateXlsx(filePath, { assemblies: Object.keys(readObj(KEYS.asm)), members: readArr(KEYS.members).map((m) => m.name) });
+  shell.showItemInFolder(filePath);
+}
+
+// ---------- import ----------
+function applyImport(data, replace) {
+  const existingTasks = replace ? [] : readArr(KEYS.tasks);
+  let tid = Math.max(0, ...existingTasks.map((t) => t.id || 0)) + 1;
+  const newTasks = data.tasks.map((t) => ({
+    id: tid++, asm: t.asm || "", task: t.task, pri: t.pri, status: t.status,
+    who: t.who || "", ctrl: t.ctrl || "", due: t.due || "", notes: t.notes || "",
+    tags: t.tags || [], checklist: [], comments: [], attachments: [],
+  }));
+  store.setItem(KEYS.tasks, JSON.stringify([...existingTasks, ...newTasks]));
+
+  const existingProc = replace ? [] : readArr(KEYS.proc);
+  let pid = Math.max(0, ...existingProc.map((p) => p.id || 0)) + 1;
+  const newProc = data.procurement.map((p) => ({ id: pid++, ...p }));
+  store.setItem(KEYS.proc, JSON.stringify([...existingProc, ...newProc]));
+
+  // Merge any new מכלול values into the managed list (assign colors).
+  const asmObj = readObj(KEYS.asm);
+  for (const t of newTasks) {
+    const a = (t.asm || "").trim();
+    if (a && !asmObj[a]) asmObj[a] = ASM_PALETTE[Object.keys(asmObj).length % ASM_PALETTE.length];
+  }
+  store.setItem(KEYS.asm, JSON.stringify(asmObj));
+
+  const log = readArr(KEYS.log);
+  log.unshift({ ts: new Date().toISOString(), action: replace ? "יובא מ-Excel (החלפה)" : "יובא מ-Excel (הוספה)", detail: `${newTasks.length} משימות · ${newProc.length} רכש` });
+  store.setItem(KEYS.log, JSON.stringify(log.slice(0, 500)));
+
+  syncLinkedExcel();
+}
+
+async function importExcel(win) {
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: "ייבוא מ-Excel", properties: ["openFile"], filters: [{ name: "Excel", extensions: ["xlsx"] }],
+  });
+  if (canceled || !filePaths || !filePaths[0]) return;
+  let data;
+  try { data = await importXlsx(filePaths[0]); }
+  catch (e) { dialog.showErrorBox("הייבוא נכשל", "לא ניתן לקרוא את הקובץ:\n" + e.message); return; }
+
+  if (!data.tasks.length && !data.procurement.length) {
+    dialog.showMessageBox(win, { type: "warning", message: "לא נמצאו שורות לייבוא", detail: 'ודאו שהקובץ תואם לתבנית (גיליון "משימות" עם עמודות מכלול/משימה/סטטוס...).' });
+    return;
+  }
+  const { response } = await dialog.showMessageBox(win, {
+    type: "question", buttons: ["החלף הכל", "הוסף לקיים", "ביטול"], defaultId: 0, cancelId: 2,
+    message: `לייבא ${data.tasks.length} משימות ו-${data.procurement.length} פריטי רכש?`,
+    detail: '"החלף הכל" ימחק את הנתונים הקיימים ויטען מחדש מהאקסל.\n"הוסף לקיים" יוסיף את השורות לקיימות.',
+  });
+  if (response === 2) return;
+  applyImport(data, response === 0);
+  win.webContents.reload();
+}
+
+// ---------- linked Excel menu ----------
+async function linkExcel(win) {
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: "קישור קובץ Excel לעדכון אוטומטי",
+    defaultPath: linkedXlsx || `מרכז-משימות-חי.xlsx`,
+    filters: [{ name: "Excel", extensions: ["xlsx"] }],
+  });
+  if (canceled || !filePath) return;
+  linkedXlsx = filePath;
+  store.setConfig("linkedXlsx", filePath);
+  await syncLinkedExcel();
+  rebuildMenu(win);
+  dialog.showMessageBox(win, { type: "info", message: "קובץ Excel מקושר", detail: `מעתה הקובץ יתעדכן אוטומטית אחרי כל שינוי:\n${filePath}` });
+}
+function unlinkExcel(win) {
+  linkedXlsx = null;
+  store.setConfig("linkedXlsx", null);
+  rebuildMenu(win);
+}
+
+function rebuildMenu(win) { Menu.setApplicationMenu(buildMenu(win)); }
 
 function buildMenu(win) {
   const template = [
     {
       label: "קובץ",
       submenu: [
+        { label: "ייבוא מ-Excel…", click: () => importExcel(win) },
+        { label: "הורד תבנית Excel…", click: () => downloadTemplate(win) },
+        { type: "separator" },
         { label: "ייצוא ל-Excel…", accelerator: "CmdOrCtrl+E", click: () => exportExcel(win) },
         { label: "ייצוא גיבוי (JSON)…", click: () => exportBackup(win) },
+        { type: "separator" },
+        linkedXlsx
+          ? { label: `נתק Excel מקושר  (${path.basename(linkedXlsx)})`, click: () => unlinkExcel(win) }
+          : { label: "קשר Excel לעדכון אוטומטי…", click: () => linkExcel(win) },
         { type: "separator" },
         { label: "פתח תיקיית נתונים", click: () => shell.showItemInFolder(store.getDbPath()) },
         { type: "separator" },
@@ -61,22 +168,17 @@ function buildMenu(win) {
         { role: "undo", label: "בטל" },
         { role: "redo", label: "בצע שוב" },
         { type: "separator" },
-        { role: "cut", label: "גזור" },
-        { role: "copy", label: "העתק" },
-        { role: "paste", label: "הדבק" },
-        { role: "selectAll", label: "בחר הכל" },
+        { role: "cut", label: "גזור" }, { role: "copy", label: "העתק" },
+        { role: "paste", label: "הדבק" }, { role: "selectAll", label: "בחר הכל" },
       ],
     },
     {
       label: "תצוגה",
       submenu: [
         { role: "reload", label: "רענן" },
-        { role: "resetZoom", label: "איפוס זום" },
-        { role: "zoomIn", label: "הגדל" },
-        { role: "zoomOut", label: "הקטן" },
+        { role: "resetZoom", label: "איפוס זום" }, { role: "zoomIn", label: "הגדל" }, { role: "zoomOut", label: "הקטן" },
         { type: "separator" },
-        { role: "togglefullscreen", label: "מסך מלא" },
-        { role: "toggleDevTools", label: "כלי פיתוח" },
+        { role: "togglefullscreen", label: "מסך מלא" }, { role: "toggleDevTools", label: "כלי פיתוח" },
       ],
     },
     {
@@ -86,9 +188,8 @@ function buildMenu(win) {
         {
           label: "אודות",
           click: () => dialog.showMessageBox(win, {
-            type: "info", title: "אודות",
-            message: "מרכז בקרת משימות",
-            detail: `גרסה ${app.getVersion()}\nהנתונים נשמרים מקומית בקובץ:\n${store.getDbPath()}`,
+            type: "info", title: "אודות", message: "מרכז בקרת משימות",
+            detail: `גרסה ${app.getVersion()}\nנתונים: ${store.getDbPath()}\nExcel מקושר: ${linkedXlsx || "—"}`,
           }),
         },
       ],
@@ -99,18 +200,10 @@ function buildMenu(win) {
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1320,
-    height: 860,
-    minWidth: 940,
-    minHeight: 600,
-    backgroundColor: "#0B0E14",
-    title: "מרכז בקרת משימות",
+    width: 1320, height: 860, minWidth: 940, minHeight: 600,
+    backgroundColor: "#0B0E14", title: "מרכז בקרת משימות",
     icon: path.join(__dirname, "build", "icon.png"),
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
+    webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false },
   });
   Menu.setApplicationMenu(buildMenu(win));
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
@@ -119,15 +212,18 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   await store.init(path.join(baseDir(), "mission-control.db"));
+  linkedXlsx = store.getConfig("linkedXlsx") || null;
 
-  // Belt-and-suspenders: wipe any service worker / cache-storage left by an
-  // earlier build before loading the UI. (Our data lives in SQLite, not here,
-  // so this never touches user data.) Prevents a stale SW from breaking load.
+  // Wipe any service worker / cache-storage left by an earlier build before
+  // loading the UI. (Our data lives in SQLite, so this never touches user data.)
   try { await session.defaultSession.clearStorageData({ storages: ["serviceworkers", "cachestorage"] }); } catch {}
 
-  // Synchronous key/value (mirrors localStorage) + async blob ops (attachments).
   ipcMain.on("mc:getItem", (e, key) => { e.returnValue = store.getItem(key); });
-  ipcMain.on("mc:setItem", (e, key, json) => { store.setItem(key, json); e.returnValue = true; });
+  ipcMain.on("mc:setItem", (e, key, json) => {
+    store.setItem(key, json);
+    e.returnValue = true;
+    if (key.includes("tasks") || key.includes("procurement")) scheduleXlsxSync();
+  });
   ipcMain.on("mc:dbPath", (e) => { e.returnValue = store.getDbPath(); });
   ipcMain.handle("mc:putBlob", (e, id, bytes, type) => { store.putBlob(id, bytes, type); return true; });
   ipcMain.handle("mc:getBlob", (e, id) => store.getBlob(id));
