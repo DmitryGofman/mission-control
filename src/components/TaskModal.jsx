@@ -4,8 +4,8 @@ import { STATUSES, PRIORITIES, STATUS_ORDER, readable, initials, tagColor, asmCo
 import { useEscape } from "../lib/useEscape.js";
 import Attachments from "./Attachments.jsx";
 
-function Field({ label, children }) {
-  return <div style={S.field}><label style={S.fieldLabel}>{label}</label>{children}</div>;
+function Field({ label, children, title }) {
+  return <div style={S.field}><label style={S.fieldLabel} title={title}>{label}</label>{children}</div>;
 }
 
 function Select({ value, options, onChange, color }) {
@@ -216,8 +216,8 @@ export default function TaskModal({ task, members, assemblies = {}, tagSuggestio
               {ctrlOptions.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </Field>
-          <Field label="תג״ב">
-            <input type="date" style={S.dateInput} value={dueToISO(draft.due)}
+          <Field label="תג״ב" title="תאריך גמר בנייה — תאריך היעד למשימה">
+            <input type="date" style={S.dateInput} title="תאריך גמר בנייה (תאריך יעד)" value={dueToISO(draft.due)}
               onChange={(e) => set("due", isoToDue(e.target.value))} />
           </Field>
         </div>

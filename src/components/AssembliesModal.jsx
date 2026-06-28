@@ -8,6 +8,7 @@ import { useEscape } from "../lib/useEscape.js";
 // re-tags tasks on rename).
 export default function AssembliesModal({ assemblies, tasks, onChange, onClose }) {
   const [newName, setNewName] = useState("");
+  const [draft, setDraft] = useState(null); // { key, value } while a name is being edited
   useEscape(onClose);
 
   const names = Object.keys(assemblies);
@@ -22,11 +23,17 @@ export default function AssembliesModal({ assemblies, tasks, onChange, onClose }
     setNewName("");
   }
 
-  function rename(oldName, value) {
-    // Rebuild preserving order with the key renamed (value may be empty mid-typing).
+  // Edit the name locally as the user types (no task re-tag / audit spam, and the
+  // object key stays stable so the input keeps focus). Commit once on blur.
+  function commitRename(oldName, value) {
+    setDraft(null);
+    const to = value.trim();
+    if (!to || to === oldName) return;
+    if (assemblies[to]) { alert("מכלול בשם הזה כבר קיים."); return; }
+    // Rebuild preserving order with the key renamed.
     const next = {};
-    for (const [k, v] of Object.entries(assemblies)) next[k === oldName ? value : k] = v;
-    onChange(next, value && value !== oldName ? { type: "rename", from: oldName, to: value } : undefined);
+    for (const [k, v] of Object.entries(assemblies)) next[k === oldName ? to : k] = v;
+    onChange(next, { type: "rename", from: oldName, to });
   }
 
   function recolor(name) {
@@ -52,7 +59,11 @@ export default function AssembliesModal({ assemblies, tasks, onChange, onClose }
           <div key={name} style={S.memberRow}>
             <span style={{ ...S.swatch, background: assemblies[name] }} onClick={() => recolor(name)} title="שנה צבע" />
             <span style={{ ...S.qAsm, background: assemblies[name], color: readable(assemblies[name]), flexShrink: 0 }}>{name || "—"}</span>
-            <input style={S.memberName} value={name} onChange={(e) => rename(name, e.target.value)} />
+            <input style={S.memberName}
+              value={draft && draft.key === name ? draft.value : name}
+              onFocus={() => setDraft({ key: name, value: name })}
+              onChange={(e) => setDraft({ key: name, value: e.target.value })}
+              onBlur={(e) => commitRename(name, e.target.value)} />
             <span style={S.memberCount}>{countOf(name)} משימות</span>
             <button style={S.fileX} onClick={() => remove(name)} aria-label="הסר" title="הסר">×</button>
           </div>

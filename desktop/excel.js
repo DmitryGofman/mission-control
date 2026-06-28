@@ -9,13 +9,15 @@ function styleHeader(row) {
   });
 }
 
-async function exportXlsx(filePath, { tasks = [], procurement = [] }) {
+async function exportXlsx(filePath, { tasks = [], procurement = [], projectName = "" }) {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Mission Control";
   wb.created = new Date();
+  if (projectName) { wb.title = projectName; wb.subject = projectName; }
 
   // --- Tasks sheet ---
   const ts = wb.addWorksheet("משימות", { views: [{ rightToLeft: true, state: "frozen", ySplit: 1 }] });
+  if (projectName) ts.headerFooter.oddHeader = `&C&"-,Bold"${projectName}`;
   ts.columns = [
     { header: "מכלול", key: "asm", width: 14 },
     { header: "משימה", key: "task", width: 40 },
@@ -74,6 +76,15 @@ function findCol(cols, keys) {
   return hit ? hit.col : null;
 }
 function cellText(row, col) { return col ? String(row.getCell(col).text || "").trim() : ""; }
+// Read a date column: if Excel parsed it as a real Date cell, format it as D.M.YY
+// (our canonical due format) instead of relying on the locale-formatted text.
+function cellDue(row, col) {
+  if (!col) return "";
+  const v = row.getCell(col).value;
+  const d = v instanceof Date ? v : (v && v.result instanceof Date ? v.result : null);
+  if (d) return `${d.getUTCDate()}.${d.getUTCMonth() + 1}.${String(d.getUTCFullYear()).slice(2)}`;
+  return cellText(row, col);
+}
 function splitTags(s) { return s ? s.split(/[,;،]/).map((x) => x.trim()).filter(Boolean) : []; }
 
 // Read a workbook (in the export format) back into { tasks, procurement }.
@@ -99,7 +110,7 @@ async function importXlsx(filePath) {
         status: pick(g(row, ["סטטוס"]), STATUSES, "בעבודה"),
         who: g(row, ["מבצע"]),
         ctrl: g(row, ["בקר"]),
-        due: g(row, ["תג"]),
+        due: cellDue(row, findCol(cols, ["תג"])),
         tags: splitTags(g(row, ["תווי", "תגי"])),
         notes: g(row, ["הער"]),
       });

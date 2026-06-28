@@ -32,7 +32,7 @@ const readStr = (key) => { try { const v = JSON.parse(store.getItem(key) || '""'
 // ---------- linked Excel auto-sync ----------
 function syncLinkedExcel() {
   if (!linkedXlsx) return Promise.resolve();
-  return exportXlsx(linkedXlsx, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc) })
+  return exportXlsx(linkedXlsx, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc), projectName: readStr(KEYS.project) })
     .catch((e) => console.error("excel sync failed:", e.message));
 }
 function scheduleXlsxSync() {
@@ -43,12 +43,14 @@ function scheduleXlsxSync() {
 
 // ---------- exports ----------
 async function exportExcel(win) {
+  const pname = readStr(KEYS.project);
+  const safe = (pname || "מרכז-משימות").trim().replace(/[\\/:*?"<>|]/g, "-");
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: "ייצוא ל-Excel", defaultPath: `מרכז-משימות-${today()}.xlsx`,
+    title: "ייצוא ל-Excel", defaultPath: `${safe}-${today()}.xlsx`,
     filters: [{ name: "Excel", extensions: ["xlsx"] }],
   });
   if (canceled || !filePath) return;
-  await exportXlsx(filePath, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc) });
+  await exportXlsx(filePath, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc), projectName: pname });
   shell.showItemInFolder(filePath);
 }
 

@@ -25,8 +25,10 @@ function buildWorkbook(ExcelJSlib, { tasks = [], procurement = [], projectName =
   const wb = new ExcelJSlib.Workbook();
   wb.creator = "Mission Control";
   wb.created = new Date();
+  if (projectName) { wb.title = projectName; wb.subject = projectName; }
 
   const ts = wb.addWorksheet("משימות", { views: [{ rightToLeft: true, state: "frozen", ySplit: 1 }] });
+  if (projectName) ts.headerFooter.oddHeader = `&C&"-,Bold"${projectName}`;
   ts.columns = [
     { header: "מכלול", key: "asm", width: 14 }, { header: "משימה", key: "task", width: 40 },
     { header: "עדיפות", key: "pri", width: 10 }, { header: "סטטוס", key: "status", width: 12 },
@@ -93,6 +95,15 @@ export async function templateXlsx({ assemblies = [], members = [], projectName 
 function headerMap(sheet) { const m = []; sheet.getRow(1).eachCell((c, col) => m.push({ text: String(c.text || "").trim(), col })); return m; }
 function findCol(cols, keys) { const h = cols.find((c) => keys.some((k) => c.text.includes(k))); return h ? h.col : null; }
 function cellText(row, col) { return col ? String(row.getCell(col).text || "").trim() : ""; }
+// Read a date column: if Excel parsed it as a real Date cell, format it as D.M.YY
+// (our canonical due format) instead of using the locale-formatted display text.
+function cellDue(row, col) {
+  if (!col) return "";
+  const v = row.getCell(col).value;
+  const d = v instanceof Date ? v : (v && v.result instanceof Date ? v.result : null);
+  if (d) return `${d.getUTCDate()}.${d.getUTCMonth() + 1}.${String(d.getUTCFullYear()).slice(2)}`;
+  return cellText(row, col);
+}
 function splitTags(s) { return s ? s.split(/[,;،]/).map((x) => x.trim()).filter(Boolean) : []; }
 
 // Parse a File (from an <input type=file>) into { tasks, procurement } (no ids).
@@ -112,7 +123,7 @@ export async function importXlsx(file) {
       if (!task) return;
       tasks.push({ asm: g(row, ["מכלול"]), task,
         pri: pick(g(row, ["עדיפות"]), PRIORITIES, "בינוני"), status: pick(g(row, ["סטטוס"]), STATUSES, "בעבודה"),
-        who: g(row, ["מבצע"]), ctrl: g(row, ["בקר"]), due: g(row, ["תג"]),
+        who: g(row, ["מבצע"]), ctrl: g(row, ["בקר"]), due: cellDue(row, findCol(cols, ["תג"])),
         tags: splitTags(g(row, ["תווי", "תגי"])), notes: g(row, ["הער"]) });
     });
   }

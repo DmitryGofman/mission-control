@@ -59,7 +59,7 @@ export const SEED = [
   { id: 3, asm: "אלקטרוני", task: "הגדרת טולרנסים לכל ממשק", pri: "בינוני", status: "תקוע", who: "דימה", ctrl: "", due: "", notes: "ממתין להחלטת תכן.", attachments: [] },
   { id: 4, asm: "אלקטרוני", task: "בחינת מכלולי ריתוך ייעודיים", pri: "נמוך", status: "לבדיקה", who: "ליאב", ctrl: "דימה", due: "", notes: "הצעות מספק.", attachments: [] },
   { id: 5, asm: "פרופיל אב", task: "שרשור רתמות בפרופילים", pri: "בינוני", status: "בעבודה", who: "ליאב", ctrl: "דימה", due: "20.4.26", notes: "", attachments: [] },
-  { id: 6, asm: "פרופיל אב", task: "עדכון קונסטרוקציה – רידוד משקל", pri: "גבוה", status: "תקוע", who: "דימה", ctrl: "איבצן", due: "21.4.26", notes: "קריטי.", attachments: [] },
+  { id: 6, asm: "פרופיל אב", task: "עדכון קונסטרוקציה – רידוד משקל", pri: "גבוה", status: "תקוע", who: "דימה", ctrl: "דימה", due: "21.4.26", notes: "קריטי.", attachments: [] },
   { id: 7, asm: "תחנה קדמית", task: "ניסויי הרכבה ופירוק חוזרים", pri: "בינוני", status: "לבדיקה", who: "אלון", ctrl: "דימה", due: "", notes: "מדידת זמן הרכבה.", attachments: [] },
   { id: 8, asm: "כללי", task: "בניית BOM כללי מפורט", pri: "גבוה", status: "בוצע", who: "ליאב", ctrl: "דימה", due: "", notes: "", attachments: [] },
   { id: 9, asm: "בומרנג", task: "אפיון ממשק בקרה", pri: "בינוני", status: "בעבודה", who: "ליאב", ctrl: "דימה", due: "", notes: "", attachments: [] },
