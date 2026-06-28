@@ -51,8 +51,13 @@ export default function SwipeRow({ onComplete, onPostpone, onClick, rowStyle, ch
         {past && dx < 0 ? "שחרר לדחייה" : "דחה למחר"} 📅
       </div>
       <div
-        className={dragging ? undefined : "swipe-snap"}
-        style={{ ...base, ...(rowStyle || S.agendaRow), transform: `translateX(${dx}px)` }}
+        style={{
+          ...base, ...(rowStyle || S.agendaRow), transform: `translateX(${dx}px)`,
+          // Own the transition here (after rowStyle) so a caller's row style can't
+          // animate the transform mid-drag: follow the finger instantly while
+          // dragging, smooth snap-back on release. Same behavior in every view.
+          transition: dragging ? "none" : "transform .18s ease",
+        }}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
         onClick={click}>
         {children}
