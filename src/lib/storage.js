@@ -55,13 +55,20 @@ async function tx(mode, fn) {
   });
 }
 
+export const isDesktop = !!desktop;
+
 export async function putBlob(id, blob) {
   if (desktop) {
     const buf = new Uint8Array(await blob.arrayBuffer());
-    return window.mcStore.putBlob(id, buf, blob.type || "application/octet-stream");
+    return window.mcStore.putBlob(id, buf, blob.type || "application/octet-stream", blob.name || id);
   }
   return tx("readwrite", (s) => s.put(blob, id));
 }
+
+// Desktop only: open the attachment in the OS default app / reveal it in the
+// file manager. No-ops on web (the UI shows a download button there instead).
+export function openAttachment(id) { if (desktop) return window.mcStore.openBlob(id); }
+export function revealAttachment(id) { if (desktop) return window.mcStore.revealBlob(id); }
 
 export async function getBlob(id) {
   if (desktop) {

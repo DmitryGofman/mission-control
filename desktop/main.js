@@ -175,6 +175,7 @@ function buildMenu(win) {
           : { label: "ייצוא חי לאקסל (חד-כיווני)…", click: () => linkExcel(win) },
         { type: "separator" },
         { label: "פתח תיקיית נתונים", click: () => shell.showItemInFolder(store.getDbPath()) },
+        { label: "פתח תיקיית קבצים מצורפים", click: () => shell.openPath(store.getAttachDir()) },
         { type: "separator" },
         { role: "quit", label: "יציאה" },
       ],
@@ -244,9 +245,11 @@ app.whenReady().then(async () => {
     if (key.includes("tasks") || key.includes("procurement")) scheduleXlsxSync();
   });
   ipcMain.on("mc:dbPath", (e) => { e.returnValue = store.getDbPath(); });
-  ipcMain.handle("mc:putBlob", (e, id, bytes, type) => { store.putBlob(id, bytes, type); return true; });
+  ipcMain.handle("mc:putBlob", (e, id, bytes, type, name) => { store.putBlob(id, bytes, type, name); return true; });
   ipcMain.handle("mc:getBlob", (e, id) => store.getBlob(id));
   ipcMain.handle("mc:deleteBlob", (e, id) => { store.deleteBlob(id); return true; });
+  ipcMain.handle("mc:openAttachment", async (e, id) => { const p = store.getAttachmentPath(id); if (p) await shell.openPath(p); return !!p; });
+  ipcMain.handle("mc:revealAttachment", (e, id) => { const p = store.getAttachmentPath(id); if (p) shell.showItemInFolder(p); return !!p; });
 
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

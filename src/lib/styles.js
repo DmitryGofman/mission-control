@@ -125,6 +125,8 @@ export const S = {
   thumb: { position: "relative", aspectRatio: "1", borderRadius: 9, overflow: "hidden", border: `1px solid ${LINE}`, background: PANEL, cursor: "pointer" },
   thumbImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
   thumbX: { position: "absolute", top: 3, insetInlineEnd: 3, width: 18, height: 18, borderRadius: "50%", border: "none", background: "rgba(0,0,0,.65)", color: "#fff", fontSize: 12, cursor: "pointer", lineHeight: 1, display: "grid", placeItems: "center" },
+  thumbAct: { position: "absolute", bottom: 3, insetInlineStart: 3, width: 18, height: 18, borderRadius: "50%", border: "none", background: "rgba(0,0,0,.65)", color: "#fff", fontSize: 11, cursor: "pointer", lineHeight: 1, display: "grid", placeItems: "center" },
+  fileAct: { font: "inherit", fontSize: 11.5, fontWeight: 600, color: INK, background: "none", border: `1px solid ${LINE}`, borderRadius: 7, padding: "3px 8px", cursor: "pointer", flexShrink: 0 },
   fileRow: { display: "flex", alignItems: "center", gap: 9, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 9, padding: "8px 10px", marginBottom: 6 },
   fileIcon: { fontSize: 16, flexShrink: 0 },
   fileName: { fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },

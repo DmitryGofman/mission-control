@@ -13,6 +13,13 @@ const initSqlJs = require("sql.js");
 
 let db = null;
 let dbPath = null;
+let attachDir = null; // <data dir>/attachments — real files live here
+
+function safeName(name) {
+  // Strip only filesystem-illegal characters; keep spaces/dots so names stay readable.
+  return String(name || "file").replace(/[\\/:*?"<>|]/g, "_").trim().slice(0, 120) || "file";
+}
+function attachFileName(id, name) { return `${id}__${safeName(name)}`; }
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
@@ -37,8 +44,51 @@ async function init(targetPath) {
   dbPath = targetPath;
   db = fs.existsSync(dbPath) ? new SQL.Database(fs.readFileSync(dbPath)) : new SQL.Database();
   db.run(SCHEMA);
+  // Attachments now live as real files in <data dir>/attachments so they're
+  // browsable/openable. The DB keeps metadata + the on-disk filename.
+  attachDir = path.join(path.dirname(dbPath), "attachments");
+  fs.mkdirSync(attachDir, { recursive: true });
+  ensureAttachmentCols();
+  migrateBlobsToFiles();
   persist();
   return dbPath;
+}
+
+// Add the name/file columns to older databases that predate folder storage.
+function ensureAttachmentCols() {
+  const info = db.exec("PRAGMA table_info(attachments)");
+  const cols = info.length ? info[0].values.map((r) => r[1]) : [];
+  if (!cols.includes("name")) db.run("ALTER TABLE attachments ADD COLUMN name TEXT");
+  if (!cols.includes("file")) db.run("ALTER TABLE attachments ADD COLUMN file TEXT");
+}
+
+// One-time migration: any attachment still held as a BLOB in the DB is written
+// out to a real file in the attachments folder (named from the task metadata
+// where available), and the BLOB is cleared.
+function migrateBlobsToFiles() {
+  const res = db.exec("SELECT id,type,data FROM attachments WHERE data IS NOT NULL AND (file IS NULL OR file='')");
+  if (!res.length) return;
+  const names = attachmentNames();
+  for (const [id, , data] of res[0].values) {
+    if (data == null) continue;
+    const fname = attachFileName(id, names[id] || id);
+    try {
+      fs.writeFileSync(path.join(attachDir, fname), Buffer.from(data));
+      db.run("UPDATE attachments SET file=?, name=?, data=NULL WHERE id=?", [fname, names[id] || null, id]);
+    } catch (e) { console.error("attachment migrate failed", id, e.message); }
+  }
+}
+
+// Map attachment id -> original filename, read from the tasks' attachment JSON.
+function attachmentNames() {
+  const map = {};
+  try {
+    const res = db.exec("SELECT attachments FROM tasks WHERE attachments IS NOT NULL");
+    if (res.length) for (const [json] of res[0].values) {
+      for (const a of JSON.parse(json || "[]")) if (a && a.id) map[a.id] = a.name;
+    }
+  } catch {}
+  return map;
 }
 
 function persist() {
@@ -129,20 +179,40 @@ function setItem(key, json) {
   persist();
 }
 
-function putBlob(id, bytes, type) {
-  db.run("INSERT OR REPLACE INTO attachments(id,type,data) VALUES (?,?,?)", [id, type, bytes]);
+function putBlob(id, bytes, type, name) {
+  const fname = attachFileName(id, name);
+  fs.writeFileSync(path.join(attachDir, fname), Buffer.from(bytes));
+  db.run("INSERT OR REPLACE INTO attachments(id,type,name,data,file) VALUES (?,?,?,NULL,?)", [id, type, name || null, fname]);
   persist();
 }
 function getBlob(id) {
-  const res = db.exec("SELECT type,data FROM attachments WHERE id=?", [id]);
+  const res = db.exec("SELECT type,data,file FROM attachments WHERE id=?", [id]);
   if (!res.length) return null;
-  const [type, data] = res[0].values[0];
-  return { type, bytes: Buffer.from(data) };
+  const [type, data, file] = res[0].values[0];
+  if (file) {
+    const fpath = path.join(attachDir, file);
+    if (!fs.existsSync(fpath)) return null;
+    return { type, bytes: fs.readFileSync(fpath) };
+  }
+  return data != null ? { type, bytes: Buffer.from(data) } : null; // legacy BLOB fallback
 }
 function deleteBlob(id) {
+  const res = db.exec("SELECT file FROM attachments WHERE id=?", [id]);
+  if (res.length) {
+    const file = res[0].values[0][0];
+    if (file) { try { fs.unlinkSync(path.join(attachDir, file)); } catch {} }
+  }
   db.run("DELETE FROM attachments WHERE id=?", [id]);
   persist();
 }
+// Absolute path to an attachment file (for opening / revealing in the OS).
+function getAttachmentPath(id) {
+  const res = db.exec("SELECT file FROM attachments WHERE id=?", [id]);
+  if (!res.length) return null;
+  const file = res[0].values[0][0];
+  return file ? path.join(attachDir, file) : null;
+}
+function getAttachDir() { return attachDir; }
 
 // App config (e.g. the linked-Excel path) stored in the meta table.
 function getConfig(key) { return getMeta("cfg:" + key); }
@@ -152,4 +222,4 @@ function setConfig(key, value) {
   persist();
 }
 
-module.exports = { init, getItem, setItem, putBlob, getBlob, deleteBlob, persist, getConfig, setConfig, getDbPath: () => dbPath };
+module.exports = { init, getItem, setItem, putBlob, getBlob, deleteBlob, persist, getConfig, setConfig, getDbPath: () => dbPath, getAttachmentPath, getAttachDir };
