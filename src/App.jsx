@@ -5,7 +5,7 @@ import {
   startOfToday, addDays, dateToDue, dueToDate,
 } from "./lib/constants.js";
 import SwipeRow from "./components/SwipeRow.jsx";
-import { loadJSON, saveJSON, getBlob } from "./lib/storage.js";
+import { loadJSON, saveJSON, getBlob, onDataChanged, onSyncBusy } from "./lib/storage.js";
 import * as excelWeb from "./lib/excelWeb.js";
 import { useEscape } from "./lib/useEscape.js";
 import { S, CSS, MUTED, GOLD } from "./lib/styles.js";
@@ -66,7 +66,25 @@ export default function App() {
   const docBusyRef = useRef(false);
   const postponeRef = useRef({ id: null, count: 0, ts: 0 }); // escalating postpone (day → week)
   const [docBusy, setDocBusy] = useState(false);
+  const [syncNote, setSyncNote] = useState(null);
   useEffect(() => { undoRef.current = undo; }, [undo]);
+
+  // Shared linked-Excel (desktop): apply live updates pushed by the main process
+  // when the shared file changes, and surface a brief "file busy" note. Setting
+  // state here re-saves identical data, which the main process recognises (no diff)
+  // so it doesn't echo back — no loop.
+  useEffect(() => {
+    onDataChanged((data) => {
+      if (Array.isArray(data.tasks)) setTasks(data.tasks.map((x) => ({ attachments: [], comments: [], checklist: [], tags: [], ...x })));
+      if (Array.isArray(data.proc)) setProc(data.proc.map((x) => ({ attachments: [], ...x })));
+      if (Array.isArray(data.members)) setMembers(data.members.map((x) => ({ isController: false, ...x })));
+      if (data.assemblies && typeof data.assemblies === "object") setAssemblies(data.assemblies);
+    });
+    onSyncBusy(() => {
+      setSyncNote("הקובץ המשותף תפוס לרגע — העדכון יישמר אוטומטית כשיתפנה");
+      setTimeout(() => setSyncNote(null), 3500);
+    });
+  }, []);
 
   // Ctrl/Cmd+Z triggers the pending undo (unless typing in a field, where the
   // browser's native text-undo should win).
@@ -711,6 +729,11 @@ export default function App() {
         <div style={S.snackbar} className="snackbar-in">
           <span style={S.snackMsg}>{undo.msg}</span>
           <button style={S.snackBtn} onClick={doUndo}>↩ בטל</button>
+        </div>
+      )}
+      {syncNote && (
+        <div style={{ ...S.snackbar, bottom: "calc(env(safe-area-inset-bottom) + 76px)" }} className="snackbar-in">
+          <span style={S.snackMsg}>🔄 {syncNote}</span>
         </div>
       )}
       {showLog && <AuditDrawer log={log} onClear={() => setLog([])} onClose={() => setShowLog(false)} />}
