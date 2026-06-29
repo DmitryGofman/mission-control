@@ -70,6 +70,12 @@ export async function putBlob(id, blob) {
 export function openAttachment(id) { if (desktop) return window.mcStore.openBlob(id); }
 export function revealAttachment(id) { if (desktop) return window.mcStore.revealBlob(id); }
 
+// Shared linked-Excel live updates (desktop only): the main process pushes
+// merged data when the shared file changes, and a "busy" signal when the file
+// is locked by another user mid-write.
+export function onDataChanged(cb) { if (desktop && window.mcStore.onDataChanged) window.mcStore.onDataChanged(cb); }
+export function onSyncBusy(cb) { if (desktop && window.mcStore.onSyncBusy) window.mcStore.onSyncBusy(cb); }
+
 export async function getBlob(id) {
   if (desktop) {
     const rec = await window.mcStore.getBlob(id);

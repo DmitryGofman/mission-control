@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const store = require("./store");
 const { exportXlsx, importXlsx, templateXlsx } = require("./excel");
+const { mergeTasks, mergeProc, flatSigTask, flatSigProc } = require("./syncmerge");
 
 // Load the UI in a dedicated session partition. Older builds accidentally
 // registered a service worker under the default file:// session that hijacked
@@ -32,20 +33,59 @@ const readArr = (key) => { try { return JSON.parse(store.getItem(key) || "[]"); 
 const readObj = (key) => { try { return JSON.parse(store.getItem(key) || "{}"); } catch { return {}; } };
 const readStr = (key) => { try { const v = JSON.parse(store.getItem(key) || '""'); return typeof v === "string" ? v : ""; } catch { return ""; } };
 
-// ---------- linked Excel: two-way sync ----------
-// App → Excel (write) on every change, AND Excel → App (read) when the file is
-// edited externally. Matched by the מזהה (ID) column so external edits update
-// the right task while app-only data (checklists/comments/attachments) is kept.
-function syncLinkedExcel() {
-  if (!linkedXlsx || applyingExternal) return Promise.resolve();
-  return exportXlsx(linkedXlsx, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc), projectName: readStr(KEYS.project), assemblies: readObj(KEYS.asm) })
-    .then(() => { try { lastSyncMtime = fs.statSync(linkedXlsx).mtimeMs; } catch {} })
-    .catch((e) => console.error("excel sync failed:", e.message));
+// ---------- linked Excel: shared multi-user sync (lock + row-level merge) ----------
+// The linked Excel acts as a shared database for ~5 people. On any local change
+// we LOCK the file, read it fresh, merge our changed rows on top (others' rows
+// preserved), write, unlock — so concurrent edits to different rows never clobber.
+// We also watch the file and pull others' changes live into the UI.
+const LOCK_TTL = 12000; // ms; a lock older than this is considered stale & stolen
+let syncBaseTasks = new Map(); // id -> flat signature at last sync (to detect local edits)
+let syncBaseProc = new Map();
+const dirtyTasks = new Set(), deletedTasks = new Set();
+const dirtyProc = new Set(), deletedProc = new Set();
+let retryTimer = null;
+
+function lockPath() { return linkedXlsx + ".lock"; }
+function acquireLock() {
+  try { fs.writeFileSync(lockPath(), JSON.stringify({ pid: process.pid, ts: Date.now() }), { flag: "wx" }); return true; }
+  catch (e) {
+    if (e.code !== "EEXIST") return false;
+    let stale = true;
+    try { stale = (Date.now() - (JSON.parse(fs.readFileSync(lockPath(), "utf8")).ts || 0)) > LOCK_TTL; } catch {}
+    if (!stale) return false;
+    try { fs.writeFileSync(lockPath(), JSON.stringify({ pid: process.pid, ts: Date.now() })); return true; } catch { return false; }
+  }
 }
+function releaseLock() { try { fs.unlinkSync(lockPath()); } catch {} }
+
+function setBase(tasks, proc) {
+  syncBaseTasks = new Map(tasks.map((t) => [t.id, flatSigTask(t)]));
+  syncBaseProc = new Map(proc.map((p) => [p.id, flatSigProc(p)]));
+}
+// Record which rows the local user changed/deleted since last sync. Returns true
+// if anything flat actually changed (so we know to push to the shared file).
+function trackDirty(key, json) {
+  let changed = false;
+  if (key.includes("tasks")) {
+    const arr = JSON.parse(json || "[]"); const ids = new Set();
+    for (const t of arr) { ids.add(t.id); if (syncBaseTasks.get(t.id) !== flatSigTask(t)) { dirtyTasks.add(t.id); changed = true; } }
+    for (const id of syncBaseTasks.keys()) if (!ids.has(id)) { deletedTasks.add(id); dirtyTasks.delete(id); changed = true; }
+  } else if (key.includes("procurement")) {
+    const arr = JSON.parse(json || "[]"); const ids = new Set();
+    for (const p of arr) { ids.add(p.id); if (syncBaseProc.get(p.id) !== flatSigProc(p)) { dirtyProc.add(p.id); changed = true; } }
+    for (const id of syncBaseProc.keys()) if (!ids.has(id)) { deletedProc.add(id); dirtyProc.delete(id); changed = true; }
+  }
+  return changed;
+}
+
 function scheduleXlsxSync() {
   if (!linkedXlsx) return;
   clearTimeout(xlsxTimer);
-  xlsxTimer = setTimeout(syncLinkedExcel, 800);
+  xlsxTimer = setTimeout(() => reconcile(), 800);
+}
+function scheduleRetry() {
+  clearTimeout(retryTimer);
+  retryTimer = setTimeout(() => reconcile(), 1500);
 }
 
 function startExcelWatch() {
@@ -53,89 +93,104 @@ function startExcelWatch() {
   if (!linkedXlsx) return;
   watchedPath = linkedXlsx;
   try { lastSyncMtime = fs.existsSync(linkedXlsx) ? fs.statSync(linkedXlsx).mtimeMs : 0; } catch {}
-  // watchFile (polling) is reliable across editors/Windows/network shares.
   fs.watchFile(watchedPath, { interval: 1500 }, (curr) => {
     if (!linkedXlsx || applyingExternal) return;
-    if (curr.mtimeMs === 0) return;                 // file removed
-    if (curr.mtimeMs === lastSyncMtime) return;     // our own write — ignore
-    onExternalExcelChange();
+    if (curr.mtimeMs === 0) return;             // file removed
+    if (curr.mtimeMs === lastSyncMtime) return; // our own write — ignore
+    reconcile(); // someone else wrote — pull (and push our pending dirty if any)
   });
 }
 function stopExcelWatch() {
   if (watchedPath) { try { fs.unwatchFile(watchedPath); } catch {} watchedPath = null; }
 }
 
-// Read the externally-edited Excel and merge it into the store (Excel-as-source,
-// matched by ID). Updates existing rows + adds new ones; does NOT delete rows
-// missing from the file (so a mis-saved sheet can't wipe data — delete in the app).
-async function onExternalExcelChange() {
-  applyingExternal = true;
+function pushToRenderer() {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win && !win.isDestroyed()) win.webContents.send("mc:dataChanged", {
+    tasks: readArr(KEYS.tasks), proc: readArr(KEYS.proc), members: readArr(KEYS.members), assemblies: readObj(KEYS.asm),
+  });
+}
+function notifyBusy() {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win && !win.isDestroyed()) win.webContents.send("mc:syncBusy");
+}
+
+// The heart of shared sync: read fresh → merge → (write if we have changes) →
+// commit to the store, refresh the UI. Lock is held only around read+write.
+let reconciling = false;
+async function reconcile() {
+  if (!linkedXlsx || applyingExternal || reconciling) return;
+  const haveDirty = dirtyTasks.size || deletedTasks.size || dirtyProc.size || deletedProc.size;
+  let locked = false;
+  if (haveDirty) {
+    locked = acquireLock();
+    if (!locked) { notifyBusy(); scheduleRetry(); return; } // file busy — keep dirty, retry
+  }
+  reconciling = true; applyingExternal = true;
   try {
-    const data = await importXlsx(linkedXlsx);
-    if (!data.tasks.length && !data.procurement.length) return; // empty/parse fail — skip
-    applyExcelSync(data);
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win) win.webContents.reload();
+    const fresh = fs.existsSync(linkedXlsx) ? await importXlsx(linkedXlsx) : { tasks: [], procurement: [] };
+    if (!haveDirty && !fresh.tasks.length && !fresh.procurement.length) return; // empty external read — skip (don't wipe)
+
+    const mergedTasks = mergeTasks(fresh.tasks, readArr(KEYS.tasks), dirtyTasks, deletedTasks);
+    const mergedProc = mergeProc(fresh.procurement, readArr(KEYS.proc), dirtyProc, deletedProc);
+
+    if (haveDirty) {
+      await exportXlsx(linkedXlsx, { tasks: mergedTasks, procurement: mergedProc, projectName: readStr(KEYS.project), assemblies: readObj(KEYS.asm) });
+      try { lastSyncMtime = fs.statSync(linkedXlsx).mtimeMs; } catch {}
+    }
+    commitMerged(mergedTasks, mergedProc, haveDirty);
   } catch (e) {
-    console.error("external excel import failed:", e.message);
+    console.error("excel reconcile failed:", e.message);
   } finally {
-    try { if (fs.existsSync(linkedXlsx)) lastSyncMtime = fs.statSync(linkedXlsx).mtimeMs; } catch {}
-    setTimeout(() => { applyingExternal = false; }, 2500); // outlast the 800ms write debounce
+    reconciling = false;
+    if (locked) releaseLock();
+    setTimeout(() => { applyingExternal = false; }, 300);
   }
 }
 
-const TASK_FLAT = ["asm", "task", "pri", "status", "who", "ctrl", "due", "notes"];
-const PROC_FLAT = ["item", "supplier", "status", "orderDate", "eta", "cost", "notes"];
-function applyExcelSync(data) {
-  // --- tasks: match by id, update flat fields, keep app-only fields ---
-  const tasks = readArr(KEYS.tasks);
-  const byId = new Map(tasks.map((t) => [t.id, t]));
-  let maxId = Math.max(0, ...tasks.map((t) => t.id || 0));
-  for (const row of data.tasks) {
-    if (row.id != null && byId.has(row.id)) {
-      const t = byId.get(row.id);
-      for (const k of TASK_FLAT) t[k] = row[k] != null ? row[k] : t[k];
-      t.tags = row.tags || [];
-    } else {
-      const nt = { id: ++maxId, asm: row.asm || "", task: row.task, pri: row.pri, status: row.status,
-        who: row.who || "", ctrl: row.ctrl || "", due: row.due || "", notes: row.notes || "",
-        tags: row.tags || [], checklist: [], comments: [], attachments: [] };
-      tasks.push(nt); byId.set(nt.id, nt);
-    }
-  }
+function commitMerged(tasks, proc, didWrite) {
   store.setItem(KEYS.tasks, JSON.stringify(tasks));
-
-  // --- procurement: same merge-by-id ---
-  const proc = readArr(KEYS.proc);
-  const pById = new Map(proc.map((p) => [p.id, p]));
-  let maxPid = Math.max(0, ...proc.map((p) => p.id || 0));
-  for (const row of data.procurement) {
-    if (row.id != null && pById.has(row.id)) {
-      const p = pById.get(row.id);
-      for (const k of PROC_FLAT) p[k] = row[k] != null ? row[k] : p[k];
-    } else {
-      const np = { id: ++maxPid, item: row.item, supplier: row.supplier, status: row.status,
-        orderDate: row.orderDate, eta: row.eta, cost: row.cost, notes: row.notes, attachments: [] };
-      proc.push(np); pById.set(np.id, np);
-    }
-  }
   store.setItem(KEYS.proc, JSON.stringify(proc));
-
-  // --- merge new מכלול + people, like a normal import ---
+  // new מכלול + people that arrived from others
   const asmObj = readObj(KEYS.asm);
   for (const t of tasks) { const a = (t.asm || "").trim(); if (a && !asmObj[a]) asmObj[a] = ASM_PALETTE[Object.keys(asmObj).length % ASM_PALETTE.length]; }
   store.setItem(KEYS.asm, JSON.stringify(asmObj));
-  const membersArr = readArr(KEYS.members);
-  const haveNames = new Set(membersArr.map((m) => m.name));
+  const membersArr = readArr(KEYS.members); const haveNames = new Set(membersArr.map((m) => m.name)); let added = false;
   for (const t of tasks) for (const name of [t.who, t.ctrl]) {
     const n = (name || "").trim();
-    if (n && !haveNames.has(n)) { haveNames.add(n); membersArr.push({ id: "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: n, color: ASM_PALETTE[membersArr.length % ASM_PALETTE.length], isController: false }); }
+    if (n && !haveNames.has(n)) { haveNames.add(n); added = true; membersArr.push({ id: "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: n, color: ASM_PALETTE[membersArr.length % ASM_PALETTE.length], isController: false }); }
   }
-  store.setItem(KEYS.members, JSON.stringify(membersArr));
+  if (added) store.setItem(KEYS.members, JSON.stringify(membersArr));
+  setBase(tasks, proc);
+  dirtyTasks.clear(); deletedTasks.clear(); dirtyProc.clear(); deletedProc.clear();
+  pushToRenderer();
+}
 
-  const log = readArr(KEYS.log);
-  log.unshift({ ts: new Date().toISOString(), action: "סונכרן מאקסל (עריכה חיצונית)", detail: `${data.tasks.length} משימות · ${data.procurement.length} רכש` });
-  store.setItem(KEYS.log, JSON.stringify(log.slice(0, 500)));
+// On link / startup: baseline from local, mark local-only rows as dirty (so they
+// get pushed, not dropped), start watching, and do a first reconcile (pull others
+// + push ours). Safe whether the shared file is new, empty, or already populated.
+async function bootstrapLink() {
+  if (!linkedXlsx) return;
+  dirtyTasks.clear(); deletedTasks.clear(); dirtyProc.clear(); deletedProc.clear();
+  const localT = readArr(KEYS.tasks), localP = readArr(KEYS.proc);
+  setBase(localT, localP);
+  try {
+    const fresh = fs.existsSync(linkedXlsx) ? await importXlsx(linkedXlsx) : { tasks: [], procurement: [] };
+    const fT = new Set(fresh.tasks.filter((t) => t.id != null).map((t) => t.id));
+    for (const t of localT) if (!fT.has(t.id)) dirtyTasks.add(t.id);
+    const fP = new Set(fresh.procurement.filter((p) => p.id != null).map((p) => p.id));
+    for (const p of localP) if (!fP.has(p.id)) dirtyProc.add(p.id);
+  } catch (e) { console.error("bootstrap read failed:", e.message); }
+  startExcelWatch();
+  reconcile();
+}
+// Push the entire local dataset to the linked file (used after a manual import).
+function pushAllToLinked() {
+  if (!linkedXlsx) return;
+  setBase([], []);
+  for (const t of readArr(KEYS.tasks)) dirtyTasks.add(t.id);
+  for (const p of readArr(KEYS.proc)) dirtyProc.add(p.id);
+  reconcile();
 }
 
 // ---------- exports ----------
@@ -219,7 +274,7 @@ function applyImport(data, replace) {
   log.unshift({ ts: new Date().toISOString(), action: replace ? "יובא מ-Excel (החלפה)" : "יובא מ-Excel (הוספה)", detail: `${newTasks.length} משימות · ${newProc.length} רכש` });
   store.setItem(KEYS.log, JSON.stringify(log.slice(0, 500)));
 
-  syncLinkedExcel();
+  pushAllToLinked();
 }
 
 async function importExcel(win) {
@@ -255,8 +310,7 @@ async function linkExcel(win) {
   if (canceled || !filePath) return;
   linkedXlsx = filePath;
   store.setConfig("linkedXlsx", filePath);
-  await syncLinkedExcel();
-  startExcelWatch();
+  await bootstrapLink();
   rebuildMenu(win);
   dialog.showMessageBox(win, {
     type: "info", message: "אקסל מקושר — סנכרון דו-כיווני הופעל",
@@ -267,6 +321,8 @@ function unlinkExcel(win) {
   stopExcelWatch();
   linkedXlsx = null;
   store.setConfig("linkedXlsx", null);
+  dirtyTasks.clear(); deletedTasks.clear(); dirtyProc.clear(); deletedProc.clear();
+  syncBaseTasks = new Map(); syncBaseProc = new Map();
   rebuildMenu(win);
 }
 
@@ -360,7 +416,9 @@ app.whenReady().then(async () => {
   ipcMain.on("mc:setItem", (e, key, json) => {
     store.setItem(key, json);
     e.returnValue = true;
-    if (key.includes("tasks") || key.includes("procurement")) scheduleXlsxSync();
+    if (linkedXlsx && (key.includes("tasks") || key.includes("procurement"))) {
+      if (trackDirty(key, json)) scheduleXlsxSync(); // only sync on a real (flat) change
+    }
   });
   ipcMain.on("mc:dbPath", (e) => { e.returnValue = store.getDbPath(); });
   ipcMain.handle("mc:putBlob", (e, id, bytes, type, name) => { store.putBlob(id, bytes, type, name); return true; });
@@ -370,7 +428,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("mc:revealAttachment", (e, id) => { const p = store.getAttachmentPath(id); if (p) shell.showItemInFolder(p); return !!p; });
 
   createWindow();
-  if (linkedXlsx) startExcelWatch(); // resume two-way sync for an already-linked file
+  if (linkedXlsx) bootstrapLink(); // resume shared sync for an already-linked file
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
