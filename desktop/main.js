@@ -220,7 +220,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1320, height: 860, minWidth: 940, minHeight: 600,
     backgroundColor: "#0B0E14", title: "מרכז בקרת משימות",
-    icon: path.join(__dirname, "build", "icon.png"),
+    icon: path.join(__dirname, "build", "icon.ico"),
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, partition: PARTITION },
   });
   Menu.setApplicationMenu(buildMenu(win));
