@@ -12,4 +12,7 @@ contextBridge.exposeInMainWorld("mcStore", {
   deleteBlob: (id) => ipcRenderer.invoke("mc:deleteBlob", id),
   openBlob: (id) => ipcRenderer.invoke("mc:openAttachment", id),
   revealBlob: (id) => ipcRenderer.invoke("mc:revealAttachment", id),
+  // Shared-Excel live sync: main pushes merged data / a "busy" signal.
+  onDataChanged: (cb) => ipcRenderer.on("mc:dataChanged", (e, data) => cb(data)),
+  onSyncBusy: (cb) => ipcRenderer.on("mc:syncBusy", () => cb()),
 });
