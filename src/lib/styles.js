@@ -1,11 +1,13 @@
 // ============================== design tokens & styles ==============================
-export const BG = "#0B0E14", PANEL = "#141A24", PANEL2 = "#1B2230",
-  LINE = "#283041", INK = "#E6EDF3", MUTED = "#8B97A8", GOLD = "#E8B84B";
+// Palette is driven by CSS variables (see CSS below) so the app can switch
+// between dark (default) and light themes. Inline styles reference the vars.
+export const BG = "var(--bg)", PANEL = "var(--panel)", PANEL2 = "var(--panel2)",
+  LINE = "var(--line)", INK = "var(--ink)", MUTED = "var(--muted)", GOLD = "var(--gold)";
 
 export const S = {
   boot: { background: BG, color: GOLD, minHeight: "100vh", display: "grid", placeItems: "center", fontFamily: "system-ui", fontSize: 16 },
   app: { background: `radial-gradient(900px 500px at 85% -10%, rgba(88,166,255,.06), transparent), ${BG}`, color: INK, minHeight: "100vh", fontFamily: "'Heebo',system-ui,sans-serif", display: "flex", flexDirection: "column" },
-  head: { borderBottom: `1px solid ${LINE}`, padding: "calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 12px) 8px calc(env(safe-area-inset-left) + 12px)", background: "rgba(13,17,23,.6)", backdropFilter: "blur(6px)", position: "sticky", top: 0, zIndex: 10 },
+  head: { borderBottom: `1px solid ${LINE}`, padding: "calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 12px) 8px calc(env(safe-area-inset-left) + 12px)", background: "var(--head-bg)", backdropFilter: "blur(6px)", position: "sticky", top: 0, zIndex: 10 },
   titleRow: { display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" },
   crest: { width: 28, height: 28, borderRadius: 8, display: "grid", placeItems: "center", color: GOLD, fontSize: 13, background: "linear-gradient(145deg,#1C2230,#0D1117)", border: `1px solid ${LINE}`, boxShadow: "inset 0 0 0 1px rgba(232,184,75,.15)", flexShrink: 0 },
   h1: { fontSize: 15, fontWeight: 800, margin: 0, letterSpacing: "-.3px", lineHeight: 1.1, whiteSpace: "nowrap" },
@@ -39,9 +41,11 @@ export const S = {
   body: { flex: 1, display: "flex", minHeight: 0 },
   main: { flex: 1, padding: 16, overflow: "auto", paddingBottom: 90 },
   board: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12 },
-  col: { background: "rgba(20,26,36,.5)", border: `1px solid ${LINE}`, borderRadius: 13, padding: 11, minHeight: 180, transition: "border-color .12s, background .12s" },
-  colOver: { borderColor: GOLD, background: "rgba(232,184,75,.07)", boxShadow: `inset 0 0 0 1px ${GOLD}55` },
+  col: { background: "var(--col-bg)", border: `1px solid ${LINE}`, borderRadius: 13, padding: 11, minHeight: 180, transition: "border-color .12s, background .12s" },
+  colOver: { borderColor: GOLD, background: "rgba(232,184,75,.07)", boxShadow: "inset 0 0 0 1px rgba(232,184,75,.33)" },
+  colCollapsed: { minHeight: 0, alignSelf: "start", background: PANEL2 },
   colHead: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: MUTED, marginBottom: 11 },
+  colToggle: { marginInlineStart: 4, background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 12, lineHeight: 1, padding: 2, flexShrink: 0 },
   dot: { width: 9, height: 9, borderRadius: "50%" },
   cnt: { marginInlineStart: "auto", fontFamily: "'JetBrains Mono',monospace", fontSize: 12, background: PANEL2, padding: "1px 8px", borderRadius: 20, color: INK },
   card: { background: PANEL, border: `1px solid ${LINE}`, borderRadius: 10, padding: 11, marginBottom: 9, cursor: "pointer", position: "relative", transition: ".14s" },
@@ -101,7 +105,7 @@ export const S = {
   qTask: { fontSize: 13.5, fontWeight: 600, flex: 1 },
   qDue: { fontSize: 11, color: MUTED, fontFamily: "'JetBrains Mono',monospace" },
   // FAB
-  fab: { position: "fixed", insetInlineEnd: "calc(env(safe-area-inset-right) + 16px)", bottom: "calc(env(safe-area-inset-bottom) + 16px)", zIndex: 40, display: "flex", alignItems: "center", gap: 9, background: "linear-gradient(145deg,#2A2A12,#141A24)", color: GOLD, border: `1px solid ${GOLD}66`, borderRadius: 30, padding: "13px 20px", cursor: "pointer", font: "inherit", fontSize: 14, fontWeight: 800, boxShadow: "0 8px 28px rgba(0,0,0,.5), 0 0 0 1px rgba(232,184,75,.12) inset" },
+  fab: { position: "fixed", insetInlineEnd: "calc(env(safe-area-inset-right) + 16px)", bottom: "calc(env(safe-area-inset-bottom) + 16px)", zIndex: 40, display: "flex", alignItems: "center", gap: 9, background: "linear-gradient(145deg,#2A2A12,#141A24)", color: GOLD, border: "1px solid rgba(232,184,75,.4)", borderRadius: 30, padding: "13px 20px", cursor: "pointer", font: "inherit", fontSize: 14, fontWeight: 800, boxShadow: "0 8px 28px rgba(0,0,0,.5), 0 0 0 1px rgba(232,184,75,.12) inset" },
   fabPlus: { fontSize: 18, lineHeight: 1 },
   // modal
   scrim: { position: "fixed", inset: 0, background: "rgba(5,8,12,.72)", backdropFilter: "blur(3px)", display: "grid", placeItems: "center", padding: "calc(env(safe-area-inset-top) + 16px) calc(env(safe-area-inset-right) + 16px) calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px)", zIndex: 50, overflow: "auto" },
@@ -191,7 +195,7 @@ export const S = {
   // drawer (reused for audit + members on mobile)
   drawerScrim: { position: "fixed", inset: 0, background: "rgba(5,8,12,.55)", backdropFilter: "blur(2px)", zIndex: 44 },
   drawer: { position: "fixed", insetInlineStart: 0, top: 0, bottom: 0, width: "min(440px,100vw)", background: PANEL, borderInlineEnd: `1px solid ${LINE}`, display: "flex", flexDirection: "column", minHeight: 0, zIndex: 45, boxShadow: "12px 0 40px rgba(0,0,0,.5)" },
-  railHead: { padding: "calc(env(safe-area-inset-top) + 14px) 16px 14px", borderBottom: `1px solid ${LINE}`, fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 8 },
+  railHead: { padding: "calc(env(safe-area-inset-top) + 14px) 16px 14px", borderBottom: `1px solid ${LINE}`, fontWeight: 700, fontSize: 14, display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
   drawerClose: { marginInlineStart: "auto", background: "none", border: "none", color: MUTED, fontSize: 24, cursor: "pointer", lineHeight: 1, padding: 0 },
   drawerBody: { flex: 1, overflow: "auto", padding: 16 },
   // lightbox
@@ -200,22 +204,34 @@ export const S = {
 };
 
 export const CSS = `
+:root {
+  --bg:#0B0E14; --panel:#141A24; --panel2:#1B2230; --line:#283041;
+  --ink:#E6EDF3; --muted:#8B97A8; --gold:#E8B84B;
+  --head-bg:rgba(13,17,23,.6); --col-bg:rgba(20,26,36,.5); --hover:#243044; --line-strong:#41506b;
+}
+:root.mc-light {
+  --bg:#F4F6F9; --panel:#FFFFFF; --panel2:#EDF1F6; --line:#D6DCE5;
+  --ink:#1A2230; --muted:#5B6675; --gold:#A77B14;
+  --head-bg:rgba(255,255,255,.78); --col-bg:rgba(0,0,0,.025); --hover:#E6ECF3; --line-strong:#B9C3D0;
+}
 * { box-sizing: border-box; }
-body { margin: 0; }
-.card:hover { border-color: #41506b !important; transform: translateY(-1px); }
-.pop-item:hover { background: #243044; }
-.cal-day:hover { background: #243044; }
+body { margin: 0; background: var(--bg); }
+.card:hover { border-color: var(--line-strong) !important; transform: translateY(-1px); }
+.pop-item:hover { background: var(--hover); }
+.cal-day:hover { background: var(--hover); }
 .swipe-snap { transition: transform .18s ease; }
 .snackbar-in { animation: snackIn .2s ease; }
 @keyframes snackIn { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .blink { animation: blink 1.2s infinite; }
 @keyframes blink { 0%,100%{opacity:.4} 50%{opacity:1} }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: #283041; border-radius: 8px; }
-select option { background: #1B2230; color: #E6EDF3; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+select option { background: var(--panel2); color: var(--ink); }
 input[type=date] { color-scheme: dark; }
+:root.mc-light input[type=date] { color-scheme: light; }
 input[type=date]::-webkit-calendar-picker-indicator { filter: invert(.8); opacity: .7; cursor: pointer; }
-input::placeholder, textarea::placeholder { color: #5A6373; }
+:root.mc-light input[type=date]::-webkit-calendar-picker-indicator { filter: none; }
+input::placeholder, textarea::placeholder { color: var(--muted); }
 
 @media (max-width: 820px) {
   .mc-board { grid-template-columns: 1fr 1fr !important; }

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   STATUSES, STATUS_ORDER, ASSEMBLIES, PRIORITIES, SEED, DEFAULT_MEMBERS, MEMBER_PALETTE,
   PROC_STATUSES, PROC_STATUS_ORDER, PROC_SEED, STORE, readable, initials, tagColor, asmColor,
-  startOfToday, addDays, dateToDue,
+  startOfToday, addDays, dateToDue, dueToDate,
 } from "./lib/constants.js";
 import SwipeRow from "./components/SwipeRow.jsx";
 import { loadJSON, saveJSON, getBlob } from "./lib/storage.js";
@@ -46,6 +46,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
 
   const [view, setView] = useState("board");
+  const [theme, setTheme] = useState("dark");
   const [query, setQuery] = useState("");
   const [filterPerson, setFilterPerson] = useState("");
   const [filterAsm, setFilterAsm] = useState("");
@@ -63,6 +64,7 @@ export default function App() {
   const undoTimer = useRef(null);
   const undoRef = useRef(null);
   const docBusyRef = useRef(false);
+  const postponeRef = useRef({ id: null, count: 0, ts: 0 }); // escalating postpone (day → week)
   const [docBusy, setDocBusy] = useState(false);
   useEffect(() => { undoRef.current = undo; }, [undo]);
 
@@ -88,10 +90,11 @@ export default function App() {
     const asm = loadJSON(STORE.assemblies, ASSEMBLIES);
     setTasks(t.map((x) => ({ attachments: [], comments: [], checklist: [], tags: [], ...x })));
     setMembers(m.map((x) => ({ isController: false, ...x })));
-    setProc(loadJSON(STORE.procurement, PROC_SEED));
+    setProc(loadJSON(STORE.procurement, PROC_SEED).map((x) => ({ attachments: [], ...x })));
     setLog(loadJSON(STORE.audit, []));
     setAssemblies(asm);
     setProjectName(loadJSON(STORE.project, ""));
+    setTheme(loadJSON("mc:ui:theme", "dark"));
     setFilterPerson(m[0]?.name || "");
     setFilterAsm(Object.keys(asm)[1] || Object.keys(asm)[0] || "");
     setLoaded(true);
@@ -103,6 +106,11 @@ export default function App() {
   useEffect(() => { if (loaded) saveJSON(STORE.audit, log); }, [log, loaded]);
   useEffect(() => { if (loaded) saveJSON(STORE.assemblies, assemblies); }, [assemblies, loaded]);
   useEffect(() => { if (loaded) saveJSON(STORE.project, projectName); }, [projectName, loaded]);
+  // Apply the theme to <html> (so portals/modals get it too) and persist it.
+  useEffect(() => {
+    document.documentElement.classList.toggle("mc-light", theme === "light");
+    if (loaded) saveJSON("mc:ui:theme", theme);
+  }, [theme, loaded]);
 
   // ---------- audit ----------
   function record(action, detail) {
@@ -199,7 +207,21 @@ export default function App() {
     patchTask(t.id, { due }, `"${t.task}" · תג״ב → ${due || "—"}`);
     showUndo(`"${t.task}" — תג״ב ${due || "הוסר"}`, restoreTask(t));
   }
-  const onPostpone = (t) => agendaReschedule(t, dateToDue(addDays(startOfToday(), 1)));
+  // Postpone always moves the due date FORWARD (never resets to a fixed
+  // "tomorrow", so far-future tasks aren't pulled backwards). Consecutive
+  // swipes on the same task escalate: 1st = +1 day, then +1 week each.
+  const onPostpone = (t) => {
+    const now = Date.now();
+    const p = postponeRef.current;
+    const consecutive = p.id === t.id && now - p.ts < 12000;
+    const count = consecutive ? p.count + 1 : 1;
+    postponeRef.current = { id: t.id, count, ts: now };
+    const cur = dueToDate(t.due);
+    const today = startOfToday();
+    const base = cur && cur >= today ? cur : today;
+    const step = count >= 2 ? 7 : 1; // first swipe a day, consecutive swipes a week
+    agendaReschedule(t, dateToDue(addDays(base, step)));
+  };
   // Drag a card to another status column.
   function moveTaskStatus(id, status) {
     const t = tasks.find((x) => x.id === id);
@@ -322,6 +344,21 @@ export default function App() {
     setAssemblies((prev) => {
       const next = { ...prev };
       for (const t of newTasks) { const a = (t.asm || "").trim(); if (a && !next[a]) next[a] = MEMBER_PALETTE[Object.keys(next).length % MEMBER_PALETTE.length]; }
+      return next;
+    });
+    // Add any new people from the מבצע/בקר columns to the team list.
+    setMembers((prev) => {
+      const have = new Set(prev.map((m) => m.name));
+      const next = [...prev];
+      for (const t of newTasks) {
+        for (const name of [t.who, t.ctrl]) {
+          const n = (name || "").trim();
+          if (n && !have.has(n)) {
+            have.add(n);
+            next.push({ id: "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: n, color: MEMBER_PALETTE[next.length % MEMBER_PALETTE.length], isController: false });
+          }
+        }
+      }
       return next;
     });
     record(replace ? "יובא מ-Excel (החלפה)" : "יובא מ-Excel (הוספה)", `${newTasks.length} משימות · ${data.procurement.length} רכש`);
@@ -580,8 +617,22 @@ export default function App() {
             <div style={S.sub}>{tasks.length} משימות · {counts["בוצע"]} הושלמו</div>
           </div>
           <div style={S.headRight}>
-            <button style={S.ghostBtn} onClick={() => setShowMembers(true)}>👥 צוות</button>
-            <button style={S.ghostBtn} onClick={() => setShowAssemblies(true)}>🧩 מכלולים</button>
+            <button style={S.ghostBtn} onClick={() => setShowMembers(true)}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <circle cx="5.5" cy="5" r="2.6" /><circle cx="11.5" cy="5.5" r="2.1" />
+                <path d="M1 14c0-2.5 2-4 4.5-4S10 11.5 10 14z" /><path d="M10.5 14c0-1.8.9-3.2 2.4-3.7 1.6.4 2.6 1.8 2.6 3.7z" />
+              </svg>
+              צוות
+            </button>
+            <button style={S.ghostBtn} onClick={() => setShowAssemblies(true)}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <rect x="1" y="1" width="6" height="6" rx="1.4" /><rect x="9" y="1" width="6" height="6" rx="1.4" />
+                <rect x="1" y="9" width="6" height="6" rx="1.4" /><rect x="9" y="9" width="6" height="6" rx="1.4" />
+              </svg>
+              מכלולים
+            </button>
+            <button style={S.iconBtn} onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+              aria-label="מצב כהה / בהיר" title={theme === "light" ? "מעבר למצב כהה" : "מעבר למצב בהיר"}>◐</button>
             <button style={S.iconBtn} onClick={() => setShowPanel(true)} aria-label="סיכום ואפשרויות" title="סיכום ואפשרויות">⋮</button>
           </div>
         </div>
@@ -723,6 +774,7 @@ function SidePanel({ counts, total, members, onDevSummary, onDocumentation, docB
           <button style={S.drawerClose} onClick={onClose} aria-label="סגור">×</button>
         </div>
 
+        <div style={S.drawerBody}>
         <div style={S.panelSection}>
           <div style={S.panelTitle}>סיכום משימות</div>
           <div style={S.sumRow}>
@@ -789,6 +841,7 @@ function SidePanel({ counts, total, members, onDevSummary, onDocumentation, docB
         <div style={S.panelSection}>
           <div style={S.panelHint}>אפשרויות נוספות יתווספו כאן בהמשך — דוחות, סינונים שמורים, הגדרות פרויקט ועוד.</div>
         </div>
+        </div>
       </aside>
     </>
   );
@@ -837,21 +890,34 @@ function Card({ t, members, assemblies, onClick, draggable }) {
 // and by the filter views' board layout.
 function BoardColumns({ items, members, assemblies, onPick, onMove }) {
   const [over, setOver] = useState(null);
+  // Collapsed status columns shrink to a header-only banner (count still shown,
+  // cards hidden) so a heavy column like "בוצע" doesn't overload the board.
+  // Persisted (UI preference) so it sticks across reloads.
+  const [collapsed, setCollapsed] = useState(() => new Set(loadJSON("mc:ui:collapsedCols", [])));
+  const toggle = (s) => setCollapsed((prev) => {
+    const next = new Set(prev);
+    next.has(s) ? next.delete(s) : next.add(s);
+    saveJSON("mc:ui:collapsedCols", [...next]);
+    return next;
+  });
   return (
     <div style={S.board} className="mc-board">
       {STATUS_ORDER.map((s) => {
         const colItems = items.filter((t) => t.status === s);
+        const isCollapsed = collapsed.has(s);
         return (
-          <div key={s} style={{ ...S.col, ...(over === s ? S.colOver : {}) }}
+          <div key={s} style={{ ...S.col, ...(isCollapsed ? S.colCollapsed : {}), ...(over === s ? S.colOver : {}) }}
             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (over !== s) setOver(s); }}
             onDragLeave={(e) => { if (e.currentTarget === e.target) setOver(null); }}
             onDrop={(e) => { e.preventDefault(); setOver(null); const id = +e.dataTransfer.getData("text/plain"); if (id) onMove(id, s); }}>
-            <div style={S.colHead}>
+            <div style={{ ...S.colHead, marginBottom: isCollapsed ? 0 : 11 }}>
               <span style={{ ...S.dot, background: STATUSES[s].color, boxShadow: `0 0 8px ${STATUSES[s].glow}` }} />
               {s}<span style={S.cnt}>{colItems.length}</span>
+              <button style={S.colToggle} onClick={() => toggle(s)}
+                title={isCollapsed ? "הרחב עמודה" : "כווץ לעמודה לבאנר"}>{isCollapsed ? "▸" : "▾"}</button>
             </div>
-            {colItems.map((t) => <Card key={t.id} t={t} members={members} assemblies={assemblies} onClick={() => onPick(t)} draggable />)}
-            {!colItems.length && <div style={S.empty}>—</div>}
+            {!isCollapsed && colItems.map((t) => <Card key={t.id} t={t} members={members} assemblies={assemblies} onClick={() => onPick(t)} draggable />)}
+            {!isCollapsed && !colItems.length && <div style={S.empty}>—</div>}
           </div>
         );
       })}
@@ -899,7 +965,9 @@ function FilterView({ label, options, value, onChange, items, members, assemblie
                 <span style={{ ...S.qdot, background: STATUSES[t.status].color }} />
                 <span style={{ ...S.qAsm, background: c, color: readable(c) }}>{t.asm}</span>
                 <span style={S.qTask}>{t.task}</span>
+                {(t.checklist?.length || 0) > 0 && <span style={S.clip}>✓ {t.checklist.filter((c) => c.done).length}/{t.checklist.length}</span>}
                 {(t.attachments?.length || 0) > 0 && <span style={S.clip}>📎 {t.attachments.length}</span>}
+                {(t.comments?.length || 0) > 0 && <span style={S.clip}>💬 {t.comments.length}</span>}
                 {t.due && <span style={{ ...S.qDue, ...(overdue ? S.overdue : {}) }}>{t.due}</span>}
                 <span style={{ ...S.pri, position: "static", color: PRIORITIES[t.pri], borderColor: PRIORITIES[t.pri] + "55" }}>{t.pri}</span>
               </SwipeRow>
@@ -927,7 +995,7 @@ function ProcurementView({ rows, query, onPick }) {
       <div style={S.procTable}>
         {sorted.map((r) => (
           <div key={r.id} style={S.procRow} className="card" onClick={() => onPick(r)}>
-            <span style={S.procItem}>{r.item}</span>
+            <span style={S.procItem}>{r.item}{(r.attachments?.length || 0) > 0 && <span style={{ ...S.clip, marginInlineStart: 6 }}>📎 {r.attachments.length}</span>}</span>
             <span style={S.procCell}>{r.supplier || "—"}</span>
             <span style={{ ...S.procStatus, background: PROC_STATUSES[r.status], color: readable(PROC_STATUSES[r.status]) }}>{r.status}</span>
             <span style={S.procDate}>{r.orderDate || "—"}</span>
