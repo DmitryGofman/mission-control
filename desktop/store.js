@@ -47,9 +47,11 @@ async function init(targetPath) {
   // Attachments now live as real files in <data dir>/attachments so they're
   // browsable/openable. The DB keeps metadata + the on-disk filename.
   attachDir = path.join(path.dirname(dbPath), "attachments");
-  fs.mkdirSync(attachDir, { recursive: true });
-  ensureAttachmentCols();
-  migrateBlobsToFiles();
+  // Best-effort: a hiccup creating the folder or migrating old attachments must
+  // never prevent the app from starting.
+  try { fs.mkdirSync(attachDir, { recursive: true }); } catch (e) { console.error("mkdir attachments failed", e); }
+  try { ensureAttachmentCols(); } catch (e) { console.error("ensureAttachmentCols failed", e); }
+  try { migrateBlobsToFiles(); } catch (e) { console.error("migrateBlobsToFiles failed", e); }
   persist();
   return dbPath;
 }

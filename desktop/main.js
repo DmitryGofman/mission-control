@@ -4,6 +4,12 @@ const path = require("path");
 const store = require("./store");
 const { exportXlsx, importXlsx, templateXlsx } = require("./excel");
 
+// Some Windows machines (older/!certified GPUs, VMs, remote desktop, locked-down
+// drivers) crash the GPU/renderer process when hardware acceleration is on — the
+// window opens then disappears. Disabling it is the standard, safe fix and is
+// plenty fast for this UI.
+app.disableHardwareAcceleration();
+
 // Load the UI in a dedicated session partition. Older builds accidentally
 // registered a service worker under the default file:// session that hijacked
 // page loads (black screen). A fresh partition can never inherit that SW, and
@@ -23,6 +29,22 @@ function baseDir() {
   if (app.isPackaged) return path.dirname(app.getPath("exe"));
   return __dirname;
 }
+
+// ---------- crash diagnostics ----------
+// Write a log next to the app so we can see exactly how far startup got and why
+// it failed, even on a machine we can't attach a debugger to.
+function logFile(name) { try { return path.join(baseDir(), name); } catch { return name; } }
+function logLine(msg) {
+  try { fs.appendFileSync(logFile("mc-startup.log"), `[${new Date().toISOString()}] ${msg}\n`); } catch {}
+}
+function fatal(label, err) {
+  const text = `${label}: ${(err && err.stack) || err}`;
+  try { fs.appendFileSync(logFile("mc-crash.log"), `[${new Date().toISOString()}] ${text}\n`); } catch {}
+  try { dialog.showErrorBox("Mission Control — שגיאה", text); } catch {}
+}
+process.on("uncaughtException", (e) => fatal("uncaughtException", e));
+process.on("unhandledRejection", (e) => fatal("unhandledRejection", e));
+try { logLine(`--- launch --- electron ${process.versions.electron}, node ${process.versions.node}, platform ${process.platform}`); } catch {}
 
 const today = () => new Date().toISOString().slice(0, 10);
 const readArr = (key) => { try { return JSON.parse(store.getItem(key) || "[]"); } catch { return []; } };
@@ -224,12 +246,26 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, "preload.js"), contextIsolation: true, nodeIntegration: false, partition: PARTITION },
   });
   Menu.setApplicationMenu(buildMenu(win));
+  // Surface renderer/GPU failures (a blank-then-close looks like a "crash").
+  win.webContents.on("render-process-gone", (e, d) => fatal("render-process-gone", JSON.stringify(d)));
+  win.webContents.on("did-fail-load", (e, code, desc, url) => logLine(`did-fail-load ${code} ${desc} ${url}`));
+  win.webContents.on("did-finish-load", () => logLine("did-finish-load"));
+  win.webContents.on("console-message", (e, level, message) => { if (level >= 2) logLine(`renderer-console[${level}] ${message}`); });
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
   win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: "deny" }; });
+  logLine("window created");
 }
 
+app.on("child-process-gone", (e, d) => logLine(`child-process-gone ${JSON.stringify(d)}`));
+
 app.whenReady().then(async () => {
-  await store.init(path.join(baseDir(), "mission-control.db"));
+  logLine("app ready");
+  try {
+    await store.init(path.join(baseDir(), "mission-control.db"));
+    logLine("store init ok: " + store.getDbPath());
+  } catch (e) {
+    fatal("store.init", e);
+  }
   linkedXlsx = store.getConfig("linkedXlsx") || null;
 
   // Wipe any service worker / cache left by an earlier build, from BOTH the old
@@ -253,7 +289,7 @@ app.whenReady().then(async () => {
 
   createWindow();
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
-});
+}).catch((e) => fatal("whenReady", e));
 
 app.on("window-all-closed", () => {
   try { store.persist(); } catch {}
