@@ -150,6 +150,9 @@ export default function AgendaView({ tasks, members, assemblies = {}, onPick, on
                 <span style={{ ...S.qAsm, background: c, color: readable(c) }}>{t.asm}</span>
                 ); })()}
                 <span style={S.qTask}>{t.task}</span>
+                {(t.checklist?.length || 0) > 0 && <span style={S.clip}>✓ {t.checklist.filter((c) => c.done).length}/{t.checklist.length}</span>}
+                {(t.attachments?.length || 0) > 0 && <span style={S.clip}>📎 {t.attachments.length}</span>}
+                {(t.comments?.length || 0) > 0 && <span style={S.clip}>💬 {t.comments.length}</span>}
                 <span style={{ ...S.ava, width: 20, height: 20, background: memberColor(members, t.who) }}>{initials(t.who)}</span>
                 {t.due && <span style={{ ...S.qDue, color: g.key === "overdue" ? "#F85149" : MUTED, fontWeight: g.key === "overdue" ? 700 : 400 }}>{t.due}</span>}
                 <button data-noswipe style={S.reschedBtn} title="תזמון מחדש"

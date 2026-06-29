@@ -104,6 +104,20 @@ function applyImport(data, replace) {
   }
   store.setItem(KEYS.asm, JSON.stringify(asmObj));
 
+  // Add any new people from the מבצע/בקר columns to the team list.
+  const membersArr = readArr(KEYS.members);
+  const haveNames = new Set(membersArr.map((m) => m.name));
+  for (const t of newTasks) {
+    for (const name of [t.who, t.ctrl]) {
+      const n = (name || "").trim();
+      if (n && !haveNames.has(n)) {
+        haveNames.add(n);
+        membersArr.push({ id: "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: n, color: ASM_PALETTE[membersArr.length % ASM_PALETTE.length], isController: false });
+      }
+    }
+  }
+  store.setItem(KEYS.members, JSON.stringify(membersArr));
+
   const log = readArr(KEYS.log);
   log.unshift({ ts: new Date().toISOString(), action: replace ? "יובא מ-Excel (החלפה)" : "יובא מ-Excel (הוספה)", detail: `${newTasks.length} משימות · ${newProc.length} רכש` });
   store.setItem(KEYS.log, JSON.stringify(log.slice(0, 500)));
@@ -183,8 +197,12 @@ function buildMenu(win) {
     {
       label: "עריכה",
       submenu: [
-        { role: "undo", label: "בטל" },
-        { role: "redo", label: "בצע שוב" },
+        // registerAccelerator:false keeps the Ctrl+Z/Ctrl+Y shortcut visible in the
+        // menu but lets it pass through to the page, so the app's own Undo (restore
+        // deleted task / revert change) works. Text fields still get native undo
+        // from Chromium directly.
+        { role: "undo", label: "בטל", registerAccelerator: false },
+        { role: "redo", label: "בצע שוב", registerAccelerator: false },
         { type: "separator" },
         { role: "cut", label: "גזור" }, { role: "copy", label: "העתק" },
         { role: "paste", label: "הדבק" }, { role: "selectAll", label: "בחר הכל" },

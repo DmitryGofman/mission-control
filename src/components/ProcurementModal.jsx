@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import { S } from "../lib/styles.js";
 import { PROC_STATUSES, PROC_STATUS_ORDER, readable } from "../lib/constants.js";
 import { useEscape } from "../lib/useEscape.js";
+import Attachments from "./Attachments.jsx";
 
 function Field({ label, children }) {
   return <div style={S.field}><label style={S.fieldLabel}>{label}</label>{children}</div>;
 }
 
-const blank = () => ({ item: "", supplier: "", status: "להזמין", orderDate: "", eta: "", cost: "", notes: "" });
+const blank = () => ({ item: "", supplier: "", status: "להזמין", orderDate: "", eta: "", cost: "", notes: "", attachments: [] });
 
 // Add/edit a procurement (בקרת רכש) item. Mirrors the original Excel sheet.
 export default function ProcurementModal({ row, onSave, onDelete, onClose }) {
@@ -58,6 +59,8 @@ export default function ProcurementModal({ row, onSave, onDelete, onClose }) {
           <label style={S.fieldLabel}>הערות</label>
           <textarea style={S.notes} value={draft.notes} rows={2} onChange={(e) => set("notes", e.target.value)} />
         </div>
+
+        <Attachments value={draft.attachments || []} onChange={(a) => set("attachments", a)} />
 
         <div style={S.modalActions}>
           <button style={S.primaryBtn} onClick={save}>{isEdit ? "שמור" : "הוסף פריט"}</button>
