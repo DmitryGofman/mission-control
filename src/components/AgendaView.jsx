@@ -113,7 +113,7 @@ function Reschedule({ anchor, onPick, onClose }) {
   );
 }
 
-export default function AgendaView({ tasks, members, assemblies = {}, onPick, onComplete, onReschedule }) {
+export default function AgendaView({ tasks, members, assemblies = {}, onPick, onComplete, onReschedule, onPostpone }) {
   const [resched, setResched] = useState(null); // { task, rect }
   const today = startOfToday();
 
@@ -143,7 +143,7 @@ export default function AgendaView({ tasks, members, assemblies = {}, onPick, on
             {items.map((t) => (
               <SwipeRow key={t.id}
                 onComplete={() => onComplete(t)}
-                onPostpone={() => onReschedule(t, dateToDue(addDays(today, 1)))}
+                onPostpone={() => onPostpone(t)}
                 onClick={() => onPick(t)}>
                 <span style={{ ...S.qdot, background: STATUSES[t.status].color }} />
                 {(() => { const c = asmColor(assemblies, t.asm); return (

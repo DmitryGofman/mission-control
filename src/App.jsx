@@ -673,7 +673,7 @@ export default function App() {
           )}
           {view === "agenda" && (
             <AgendaView tasks={filtered} members={members} assemblies={assemblies} onPick={setEditing}
-              onComplete={agendaComplete} onReschedule={agendaReschedule} />
+              onComplete={agendaComplete} onReschedule={agendaReschedule} onPostpone={onPostpone} />
           )}
           {view === "proc" && <ProcurementView rows={proc} query={query} onPick={setEditingProc} />}
         </main>
