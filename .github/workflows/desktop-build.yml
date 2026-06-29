@@ -1,0 +1,59 @@
+name: Build Windows desktop
+
+# Builds the Windows desktop app on a real Windows runner (electron-builder),
+# so the package + .exe icon are produced correctly, then publishes the zip as
+# a GitHub Release asset. Trigger manually from the Actions tab or via API.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (used for the release tag, e.g. 0.3.7)"
+        required: true
+        default: "0.3.7"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Build desktop renderer (strips crossorigin for file://)
+        run: npm run build:desktop
+
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build Windows app (electron-builder, unpacked dir)
+        working-directory: desktop
+        run: npx electron-builder --win --dir
+
+      - name: Package into MissionControl-Windows-x64.zip
+        shell: pwsh
+        run: |
+          $src = "desktop/release/win-unpacked"
+          if (!(Test-Path $src)) { throw "win-unpacked not found" }
+          Rename-Item $src "MissionControl"
+          Compress-Archive -Path "desktop/release/MissionControl" -DestinationPath "MissionControl-Windows-x64.zip" -Force
+          Get-Item "MissionControl-Windows-x64.zip" | Select-Object Name, Length
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-v${{ github.event.inputs.version }}
+          name: Mission Control desktop v${{ github.event.inputs.version }}
+          body: |
+            Windows desktop build (electron-builder on a Windows runner).
+            Download `MissionControl-Windows-x64.zip`, extract the whole folder, run `Mission Control.exe`.
+          files: MissionControl-Windows-x64.zip
+          fail_on_unmatched_files: true
