@@ -19,6 +19,7 @@ async function exportXlsx(filePath, { tasks = [], procurement = [], projectName 
   const ts = wb.addWorksheet("משימות", { views: [{ rightToLeft: true, state: "frozen", ySplit: 1 }] });
   if (projectName) ts.headerFooter.oddHeader = `&C&"-,Bold"${projectName}`;
   ts.columns = [
+    { header: "מזהה", key: "id", width: 8 },
     { header: "מכלול", key: "asm", width: 14 },
     { header: "משימה", key: "task", width: 40 },
     { header: "עדיפות", key: "pri", width: 10 },
@@ -34,7 +35,7 @@ async function exportXlsx(filePath, { tasks = [], procurement = [], projectName 
     const done = (t.checklist || []).filter((c) => c.done).length;
     const total = (t.checklist || []).length;
     ts.addRow({
-      asm: t.asm, task: t.task, pri: t.pri, status: t.status, who: t.who, ctrl: t.ctrl,
+      id: t.id, asm: t.asm, task: t.task, pri: t.pri, status: t.status, who: t.who, ctrl: t.ctrl,
       due: t.due, tags: (t.tags || []).join(", "),
       checklist: total ? `${done}/${total}` : "", notes: t.notes,
     });
@@ -45,6 +46,7 @@ async function exportXlsx(filePath, { tasks = [], procurement = [], projectName 
   // --- Procurement sheet ---
   const ps = wb.addWorksheet("בקרת רכש", { views: [{ rightToLeft: true, state: "frozen", ySplit: 1 }] });
   ps.columns = [
+    { header: "מזהה", key: "id", width: 8 },
     { header: "פריט", key: "item", width: 30 },
     { header: "ספק", key: "supplier", width: 18 },
     { header: "סטטוס", key: "status", width: 12 },
@@ -53,7 +55,7 @@ async function exportXlsx(filePath, { tasks = [], procurement = [], projectName 
     { header: "עלות", key: "cost", width: 12 },
     { header: "הערות", key: "notes", width: 36 },
   ];
-  for (const p of procurement) ps.addRow(p);
+  for (const p of procurement) ps.addRow({ id: p.id, item: p.item, supplier: p.supplier, status: p.status, orderDate: p.orderDate, eta: p.eta, cost: p.cost, notes: p.notes });
   styleHeader(ps.getRow(1));
 
   await wb.xlsx.writeFile(filePath);
@@ -86,6 +88,7 @@ function cellDue(row, col) {
   return cellText(row, col);
 }
 function splitTags(s) { return s ? s.split(/[,;،]/).map((x) => x.trim()).filter(Boolean) : []; }
+function parseId(s) { const n = parseInt(String(s).trim(), 10); return Number.isFinite(n) ? n : null; }
 
 // Read a workbook (in the export format) back into { tasks, procurement }.
 // Robust to column order; matches by header text. No ids — caller assigns them.
@@ -104,6 +107,7 @@ async function importXlsx(filePath) {
       const task = g(row, ["משימה"]);
       if (!task) return;
       tasks.push({
+        id: parseId(g(row, ["מזהה"])),
         asm: g(row, ["מכלול"]),
         task,
         pri: pick(g(row, ["עדיפות"]), PRIORITIES, "בינוני"),
@@ -126,6 +130,7 @@ async function importXlsx(filePath) {
       const item = g(row, ["פריט"]);
       if (!item) return;
       procurement.push({
+        id: parseId(g(row, ["מזהה"])),
         item,
         supplier: g(row, ["ספק"]),
         status: pick(g(row, ["סטטוס"]), PROC_STATUSES, "להזמין"),
