@@ -1,6 +1,25 @@
 // Export tasks + procurement to a real .xlsx workbook (RTL), for the desktop app.
 const ExcelJS = require("exceljs");
 
+// Colors mirror the app (constants.js) so the linked Excel reads like a dashboard.
+const STATUS_COLORS = { "בוצע": "3FB950", "בעבודה": "E8C547", "תקוע": "F85149", "לבדיקה": "F778BA" };
+const PRI_COLORS = { "גבוה": "FF7B72", "בינוני": "E3B341", "נמוך": "9AA5B1" };
+const PROC_STATUS_COLORS = { "להזמין": "F85149", "הוזמן": "E8C547", "בדרך": "58A6FF", "הגיע": "3FB950" };
+
+const hex6 = (c) => String(c || "5A6573").replace("#", "").slice(0, 6).padStart(6, "0");
+const argb = (c) => "FF" + hex6(c);
+function readableARGB(c) {
+  const h = hex6(c);
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "FF0D1117" : "FFFFFFFF";
+}
+// Paint a cell with a solid background + readable, centered text.
+function paint(cell, color) {
+  cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(color) } };
+  cell.font = { ...(cell.font || {}), bold: true, color: { argb: readableARGB(color) } };
+  cell.alignment = { ...(cell.alignment || {}), horizontal: "center", vertical: "middle" };
+}
+
 function styleHeader(row) {
   row.font = { bold: true, color: { argb: "FF0D1117" } };
   row.eachCell((c) => {
@@ -9,7 +28,7 @@ function styleHeader(row) {
   });
 }
 
-async function exportXlsx(filePath, { tasks = [], procurement = [], projectName = "" }) {
+async function exportXlsx(filePath, { tasks = [], procurement = [], projectName = "", assemblies = {} }) {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Mission Control";
   wb.created = new Date();
@@ -41,7 +60,16 @@ async function exportXlsx(filePath, { tasks = [], procurement = [], projectName 
     });
   }
   styleHeader(ts.getRow(1));
-  ts.eachRow((row, i) => { if (i > 1) row.alignment = { vertical: "top", wrapText: true }; });
+  ts.eachRow((row, i) => {
+    if (i === 1) return;
+    row.alignment = { vertical: "top", wrapText: true };
+    const st = String(row.getCell("status").text || "").trim();
+    if (STATUS_COLORS[st]) paint(row.getCell("status"), STATUS_COLORS[st]);
+    const asmName = String(row.getCell("asm").text || "").trim();
+    if (asmName) paint(row.getCell("asm"), assemblies[asmName] || "5A6573");
+    const pri = String(row.getCell("pri").text || "").trim();
+    if (PRI_COLORS[pri]) paint(row.getCell("pri"), PRI_COLORS[pri]);
+  });
 
   // --- Procurement sheet ---
   const ps = wb.addWorksheet("בקרת רכש", { views: [{ rightToLeft: true, state: "frozen", ySplit: 1 }] });
@@ -57,6 +85,11 @@ async function exportXlsx(filePath, { tasks = [], procurement = [], projectName 
   ];
   for (const p of procurement) ps.addRow({ id: p.id, item: p.item, supplier: p.supplier, status: p.status, orderDate: p.orderDate, eta: p.eta, cost: p.cost, notes: p.notes });
   styleHeader(ps.getRow(1));
+  ps.eachRow((row, i) => {
+    if (i === 1) return;
+    const st = String(row.getCell("status").text || "").trim();
+    if (PROC_STATUS_COLORS[st]) paint(row.getCell("status"), PROC_STATUS_COLORS[st]);
+  });
 
   await wb.xlsx.writeFile(filePath);
   return filePath;
