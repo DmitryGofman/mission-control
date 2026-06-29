@@ -97,3 +97,30 @@ via one Excel file on the network, serialize writes:
 
 **Verdict:** Genuinely easier than full v2 and workable for a ~5-person prototype.
 Good bridge until v2 (the oplog model) is built.
+
+---
+
+## ⚠️ Known build pitfalls (must-fix when resuming this work)
+
+The v0.5.0 shared-sync build crashed on launch with:
+```
+Uncaught Exception: Error: Cannot find module './syncmerge'
+Require stack: …\resources\app.asar\main.js
+```
+**Root cause:** a new main-process file (`desktop/syncmerge.js`) was `require()`d
+by `main.js` but **NOT added to the electron-builder `files` whitelist** in
+`desktop/package.json`, so it was excluded from `app.asar`. The merge *logic* was
+correct and unit-tested — it just wasn't packaged.
+
+**THE FIX (do this whenever adding ANY new main-process file):** add the new
+file to `build.files` in `desktop/package.json`. That list is a strict
+whitelist — only what's listed is bundled. (Same class of bug that once omitted
+`store.js`/`excel.js`.) After adding, the v0.5.0 multi-user code should run.
+
+**Checklist when resuming multi-user:**
+1. Re-apply the v0.5.0 changes (syncmerge.js, main.js sync engine, preload
+   onDataChanged/onSyncBusy, storage.js, App.jsx live-update + busy toast).
+2. **Add `syncmerge.js` (and any other new files) to `build.files`.**
+3. Verify the CI build, then actually launch the packaged exe (or test under
+   Electron) — a successful electron-builder run does NOT prove all required
+   files were whitelisted; only launching does.
