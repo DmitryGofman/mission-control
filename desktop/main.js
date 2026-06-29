@@ -38,7 +38,7 @@ const readStr = (key) => { try { const v = JSON.parse(store.getItem(key) || '""'
 // the right task while app-only data (checklists/comments/attachments) is kept.
 function syncLinkedExcel() {
   if (!linkedXlsx || applyingExternal) return Promise.resolve();
-  return exportXlsx(linkedXlsx, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc), projectName: readStr(KEYS.project) })
+  return exportXlsx(linkedXlsx, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc), projectName: readStr(KEYS.project), assemblies: readObj(KEYS.asm) })
     .then(() => { try { lastSyncMtime = fs.statSync(linkedXlsx).mtimeMs; } catch {} })
     .catch((e) => console.error("excel sync failed:", e.message));
 }
@@ -147,7 +147,7 @@ async function exportExcel(win) {
     filters: [{ name: "Excel", extensions: ["xlsx"] }],
   });
   if (canceled || !filePath) return;
-  await exportXlsx(filePath, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc), projectName: pname });
+  await exportXlsx(filePath, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc), projectName: pname, assemblies: readObj(KEYS.asm) });
   shell.showItemInFolder(filePath);
 }
 
