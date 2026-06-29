@@ -25,6 +25,17 @@ function stripPwa() {
         .replace(/\s*<!-- iOS: Add to Home Screen -->/g, "");
     },
     closeBundle() {
+      // CRITICAL: strip `crossorigin` from the injected <script>/<link> tags.
+      // The desktop app loads index.html via file://, where a crossorigin
+      // (CORS) module request is blocked by Chromium ("origin 'null'") — the
+      // bundle never executes and the window stays blank white. Removing the
+      // attribute makes it a plain same-origin file:// load, which Electron allows.
+      try {
+        const idx = path.join(outDir, "index.html");
+        let html = fs.readFileSync(idx, "utf8");
+        html = html.replace(/\s+crossorigin(=["'][^"']*["'])?/g, "");
+        fs.writeFileSync(idx, html);
+      } catch (e) { console.warn("could not strip crossorigin:", e.message); }
       for (const f of ["sw.js", "manifest.webmanifest"]) {
         try { fs.rmSync(path.join(outDir, f)); } catch {}
       }
