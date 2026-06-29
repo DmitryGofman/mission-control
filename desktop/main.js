@@ -15,6 +15,9 @@ const ASM_PALETTE = ["#E8B84B", "#58A6FF", "#3FB950", "#F778BA", "#BC8CFF", "#F0
 
 let linkedXlsx = null;
 let xlsxTimer = null;
+let applyingExternal = false; // true while importing an external Excel edit (suppresses our writes)
+let lastSyncMtime = 0;        // mtime of the file after OUR last write, to ignore our own changes
+let watchedPath = null;       // the file currently being watched
 
 // Where the SQLite file lives: next to the (portable) executable when packaged,
 // so it sits "in the folder the app operates in"; the project folder in dev.
@@ -29,16 +32,110 @@ const readArr = (key) => { try { return JSON.parse(store.getItem(key) || "[]"); 
 const readObj = (key) => { try { return JSON.parse(store.getItem(key) || "{}"); } catch { return {}; } };
 const readStr = (key) => { try { const v = JSON.parse(store.getItem(key) || '""'); return typeof v === "string" ? v : ""; } catch { return ""; } };
 
-// ---------- linked Excel auto-sync ----------
+// ---------- linked Excel: two-way sync ----------
+// App → Excel (write) on every change, AND Excel → App (read) when the file is
+// edited externally. Matched by the מזהה (ID) column so external edits update
+// the right task while app-only data (checklists/comments/attachments) is kept.
 function syncLinkedExcel() {
-  if (!linkedXlsx) return Promise.resolve();
+  if (!linkedXlsx || applyingExternal) return Promise.resolve();
   return exportXlsx(linkedXlsx, { tasks: readArr(KEYS.tasks), procurement: readArr(KEYS.proc), projectName: readStr(KEYS.project) })
+    .then(() => { try { lastSyncMtime = fs.statSync(linkedXlsx).mtimeMs; } catch {} })
     .catch((e) => console.error("excel sync failed:", e.message));
 }
 function scheduleXlsxSync() {
   if (!linkedXlsx) return;
   clearTimeout(xlsxTimer);
   xlsxTimer = setTimeout(syncLinkedExcel, 800);
+}
+
+function startExcelWatch() {
+  stopExcelWatch();
+  if (!linkedXlsx) return;
+  watchedPath = linkedXlsx;
+  try { lastSyncMtime = fs.existsSync(linkedXlsx) ? fs.statSync(linkedXlsx).mtimeMs : 0; } catch {}
+  // watchFile (polling) is reliable across editors/Windows/network shares.
+  fs.watchFile(watchedPath, { interval: 1500 }, (curr) => {
+    if (!linkedXlsx || applyingExternal) return;
+    if (curr.mtimeMs === 0) return;                 // file removed
+    if (curr.mtimeMs === lastSyncMtime) return;     // our own write — ignore
+    onExternalExcelChange();
+  });
+}
+function stopExcelWatch() {
+  if (watchedPath) { try { fs.unwatchFile(watchedPath); } catch {} watchedPath = null; }
+}
+
+// Read the externally-edited Excel and merge it into the store (Excel-as-source,
+// matched by ID). Updates existing rows + adds new ones; does NOT delete rows
+// missing from the file (so a mis-saved sheet can't wipe data — delete in the app).
+async function onExternalExcelChange() {
+  applyingExternal = true;
+  try {
+    const data = await importXlsx(linkedXlsx);
+    if (!data.tasks.length && !data.procurement.length) return; // empty/parse fail — skip
+    applyExcelSync(data);
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) win.webContents.reload();
+  } catch (e) {
+    console.error("external excel import failed:", e.message);
+  } finally {
+    try { if (fs.existsSync(linkedXlsx)) lastSyncMtime = fs.statSync(linkedXlsx).mtimeMs; } catch {}
+    setTimeout(() => { applyingExternal = false; }, 2500); // outlast the 800ms write debounce
+  }
+}
+
+const TASK_FLAT = ["asm", "task", "pri", "status", "who", "ctrl", "due", "notes"];
+const PROC_FLAT = ["item", "supplier", "status", "orderDate", "eta", "cost", "notes"];
+function applyExcelSync(data) {
+  // --- tasks: match by id, update flat fields, keep app-only fields ---
+  const tasks = readArr(KEYS.tasks);
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  let maxId = Math.max(0, ...tasks.map((t) => t.id || 0));
+  for (const row of data.tasks) {
+    if (row.id != null && byId.has(row.id)) {
+      const t = byId.get(row.id);
+      for (const k of TASK_FLAT) t[k] = row[k] != null ? row[k] : t[k];
+      t.tags = row.tags || [];
+    } else {
+      const nt = { id: ++maxId, asm: row.asm || "", task: row.task, pri: row.pri, status: row.status,
+        who: row.who || "", ctrl: row.ctrl || "", due: row.due || "", notes: row.notes || "",
+        tags: row.tags || [], checklist: [], comments: [], attachments: [] };
+      tasks.push(nt); byId.set(nt.id, nt);
+    }
+  }
+  store.setItem(KEYS.tasks, JSON.stringify(tasks));
+
+  // --- procurement: same merge-by-id ---
+  const proc = readArr(KEYS.proc);
+  const pById = new Map(proc.map((p) => [p.id, p]));
+  let maxPid = Math.max(0, ...proc.map((p) => p.id || 0));
+  for (const row of data.procurement) {
+    if (row.id != null && pById.has(row.id)) {
+      const p = pById.get(row.id);
+      for (const k of PROC_FLAT) p[k] = row[k] != null ? row[k] : p[k];
+    } else {
+      const np = { id: ++maxPid, item: row.item, supplier: row.supplier, status: row.status,
+        orderDate: row.orderDate, eta: row.eta, cost: row.cost, notes: row.notes, attachments: [] };
+      proc.push(np); pById.set(np.id, np);
+    }
+  }
+  store.setItem(KEYS.proc, JSON.stringify(proc));
+
+  // --- merge new מכלול + people, like a normal import ---
+  const asmObj = readObj(KEYS.asm);
+  for (const t of tasks) { const a = (t.asm || "").trim(); if (a && !asmObj[a]) asmObj[a] = ASM_PALETTE[Object.keys(asmObj).length % ASM_PALETTE.length]; }
+  store.setItem(KEYS.asm, JSON.stringify(asmObj));
+  const membersArr = readArr(KEYS.members);
+  const haveNames = new Set(membersArr.map((m) => m.name));
+  for (const t of tasks) for (const name of [t.who, t.ctrl]) {
+    const n = (name || "").trim();
+    if (n && !haveNames.has(n)) { haveNames.add(n); membersArr.push({ id: "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: n, color: ASM_PALETTE[membersArr.length % ASM_PALETTE.length], isController: false }); }
+  }
+  store.setItem(KEYS.members, JSON.stringify(membersArr));
+
+  const log = readArr(KEYS.log);
+  log.unshift({ ts: new Date().toISOString(), action: "סונכרן מאקסל (עריכה חיצונית)", detail: `${data.tasks.length} משימות · ${data.procurement.length} רכש` });
+  store.setItem(KEYS.log, JSON.stringify(log.slice(0, 500)));
 }
 
 // ---------- exports ----------
@@ -93,7 +190,7 @@ function applyImport(data, replace) {
 
   const existingProc = replace ? [] : readArr(KEYS.proc);
   let pid = Math.max(0, ...existingProc.map((p) => p.id || 0)) + 1;
-  const newProc = data.procurement.map((p) => ({ id: pid++, ...p }));
+  const newProc = data.procurement.map((p) => ({ ...p, id: pid++ }));
   store.setItem(KEYS.proc, JSON.stringify([...existingProc, ...newProc]));
 
   // Merge any new מכלול values into the managed list (assign colors).
@@ -151,7 +248,7 @@ async function importExcel(win) {
 // ---------- linked Excel menu ----------
 async function linkExcel(win) {
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: "ייצוא חי לאקסל (חד-כיווני)",
+    title: "אקסל מקושר (סנכרון דו-כיווני)",
     defaultPath: linkedXlsx || `מרכז-משימות-חי.xlsx`,
     filters: [{ name: "Excel", extensions: ["xlsx"] }],
   });
@@ -159,13 +256,15 @@ async function linkExcel(win) {
   linkedXlsx = filePath;
   store.setConfig("linkedXlsx", filePath);
   await syncLinkedExcel();
+  startExcelWatch();
   rebuildMenu(win);
   dialog.showMessageBox(win, {
-    type: "info", message: "ייצוא חי לאקסל הופעל",
-    detail: `הקובץ ייכתב מחדש אוטומטית אחרי כל שינוי באפליקציה:\n${filePath}\n\n⚠ חד-כיווני בלבד: עריכות שתבצעו ישירות בקובץ ה-Excel ידרסו בשינוי הבא. לעריכה — השתמשו באפליקציה, או בייבוא מ-Excel.`,
+    type: "info", message: "אקסל מקושר — סנכרון דו-כיווני הופעל",
+    detail: `הקובץ:\n${filePath}\n\n• שינויים באפליקציה נכתבים אוטומטית לאקסל.\n• כשתערכו ותשמרו את האקסל — האפליקציה תתעדכן ממנו תוך שניות (התאמה לפי עמודת "מזהה"; אל תמחקו אותה).\n• תת-משימות, הערות וקבצים מצורפים נשמרים גם בעדכון מאקסל.\n• מחיקת שורה באקסל לא מוחקת באפליקציה (כדי למנוע אובדן מידע בטעות) — מחקו מהאפליקציה.`,
   });
 }
 function unlinkExcel(win) {
+  stopExcelWatch();
   linkedXlsx = null;
   store.setConfig("linkedXlsx", null);
   rebuildMenu(win);
@@ -185,8 +284,9 @@ function buildMenu(win) {
         { label: "ייצוא גיבוי (JSON)…", click: () => exportBackup(win) },
         { type: "separator" },
         linkedXlsx
-          ? { label: `נתק ייצוא חי לאקסל  (${path.basename(linkedXlsx)})`, click: () => unlinkExcel(win) }
-          : { label: "ייצוא חי לאקסל (חד-כיווני)…", click: () => linkExcel(win) },
+          ? { label: `נתק אקסל מקושר  (${path.basename(linkedXlsx)})`, click: () => unlinkExcel(win) }
+          : { label: "קשר אקסל (סנכרון דו-כיווני)…", click: () => linkExcel(win) },
+        linkedXlsx ? { label: "פתח את האקסל המקושר", click: () => shell.openPath(linkedXlsx) } : { type: "separator" },
         { type: "separator" },
         { label: "פתח תיקיית נתונים", click: () => shell.showItemInFolder(store.getDbPath()) },
         { label: "פתח תיקיית קבצים מצורפים", click: () => shell.openPath(store.getAttachDir()) },
@@ -270,6 +370,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("mc:revealAttachment", (e, id) => { const p = store.getAttachmentPath(id); if (p) shell.showItemInFolder(p); return !!p; });
 
   createWindow();
+  if (linkedXlsx) startExcelWatch(); // resume two-way sync for an already-linked file
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
