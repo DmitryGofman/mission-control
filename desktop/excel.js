@@ -2,7 +2,7 @@
 const ExcelJS = require("exceljs");
 
 // Colors mirror the app (constants.js) so the linked Excel reads like a dashboard.
-const STATUS_COLORS = { "בוצע": "3FB950", "בעבודה": "E8C547", "תקוע": "F85149", "לבדיקה": "F778BA" };
+const STATUS_COLORS = { "טרם התחיל": "7D8590", "בוצע": "3FB950", "בעבודה": "E8C547", "תקוע": "F85149", "לבדיקה": "F778BA" };
 const PRI_COLORS = { "גבוה": "FF7B72", "בינוני": "E3B341", "נמוך": "9AA5B1" };
 const PROC_STATUS_COLORS = { "להזמין": "F85149", "הוזמן": "E8C547", "בדרך": "58A6FF", "הגיע": "3FB950" };
 
@@ -96,7 +96,7 @@ async function exportXlsx(filePath, { tasks = [], procurement = [], projectName 
 }
 
 // ----- valid values (for normalization on import) -----
-const STATUSES = ["בעבודה", "תקוע", "לבדיקה", "בוצע"];
+const STATUSES = ["טרם התחיל", "בעבודה", "תקוע", "לבדיקה", "בוצע"];
 const PRIORITIES = ["גבוה", "בינוני", "נמוך"];
 const PROC_STATUSES = ["להזמין", "הוזמן", "בדרך", "הגיע"];
 const pick = (val, set, fallback) => { const v = (val || "").trim(); return set.includes(v) ? v : fallback; };

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   STATUSES, STATUS_ORDER, ASSEMBLIES, PRIORITIES, SEED, DEFAULT_MEMBERS, MEMBER_PALETTE,
   PROC_STATUSES, PROC_STATUS_ORDER, PROC_SEED, STORE, readable, initials, tagColor, asmColor,
-  startOfToday, addDays, dateToDue, dueToDate,
+  startOfToday, addDays, dateToDue, dueToDate, unusedColor,
 } from "./lib/constants.js";
 import SwipeRow from "./components/SwipeRow.jsx";
 import { loadJSON, saveJSON, getBlob } from "./lib/storage.js";
@@ -124,9 +124,8 @@ export default function App() {
     if (!n) return;
     setAssemblies((prev) => {
       if (prev[n]) return prev;
-      const color = MEMBER_PALETTE[Object.keys(prev).length % MEMBER_PALETTE.length];
       record("נוסף מכלול", n);
-      return { ...prev, [n]: color };
+      return { ...prev, [n]: unusedColor(Object.values(prev)) };
     });
   }
   function changeAssemblies(next, evt) {
@@ -144,7 +143,8 @@ export default function App() {
     if (draft.asm) ensureAssembly(draft.asm);
     if (draft.id == null) {
       const id = Math.max(0, ...tasks.map((t) => t.id)) + 1;
-      const task = { id, ...draft };
+      const now = new Date().toISOString();
+      const task = { id, ...draft, createdAt: now, updatedAt: now };
       setTasks((prev) => [...prev, task]);
       record("נוספה משימה", `"${task.task}" · ${task.asm} · ${task.who || "ללא משויך"}`);
     } else {
@@ -158,7 +158,7 @@ export default function App() {
           changes.push(`${FIELD_LABELS[k]}: "${before?.[k] || "—"}"→"${draft[k] || "—"}"`);
         }
       }
-      setTasks((prev) => prev.map((t) => (t.id === draft.id ? { ...t, ...draft } : t)));
+      setTasks((prev) => prev.map((t) => (t.id === draft.id ? { ...t, ...draft, updatedAt: changes.length ? new Date().toISOString() : t.updatedAt } : t)));
       if (changes.length) record("עודכנה משימה", `"${draft.task}" · ${changes.join(" · ")}`);
     }
     setEditing(undefined);
@@ -343,7 +343,7 @@ export default function App() {
     setProc([...existingProc, ...data.procurement.map((p) => ({ id: pid++, ...p }))]);
     setAssemblies((prev) => {
       const next = { ...prev };
-      for (const t of newTasks) { const a = (t.asm || "").trim(); if (a && !next[a]) next[a] = MEMBER_PALETTE[Object.keys(next).length % MEMBER_PALETTE.length]; }
+      for (const t of newTasks) { const a = (t.asm || "").trim(); if (a && !next[a]) next[a] = unusedColor(Object.values(next)); }
       return next;
     });
     // Add any new people from the מבצע/בקר columns to the team list.
@@ -667,9 +667,7 @@ export default function App() {
               onPick={setEditing} onComplete={agendaComplete} onPostpone={onPostpone} onMove={moveTaskStatus} />
           )}
           {view === "asm" && (
-            <FilterView label="מכלול" options={Object.keys(assemblies)} value={filterAsm} onChange={setFilterAsm}
-              items={filtered.filter((t) => t.asm === filterAsm)} members={members} assemblies={assemblies} colorMap={assemblies}
-              onPick={setEditing} onComplete={agendaComplete} onPostpone={onPostpone} onMove={moveTaskStatus} />
+            <AssemblyGroups tasks={filtered} assemblies={assemblies} members={members} onPick={setEditing} />
           )}
           {view === "agenda" && (
             <AgendaView tasks={filtered} members={members} assemblies={assemblies} onPick={setEditing}
@@ -901,7 +899,7 @@ function BoardColumns({ items, members, assemblies, onPick, onMove }) {
     return next;
   });
   return (
-    <div style={S.board} className="mc-board">
+    <div style={{ ...S.board, gridTemplateColumns: `repeat(${STATUS_ORDER.length}, minmax(0,1fr))` }} className="mc-board">
       {STATUS_ORDER.map((s) => {
         const colItems = items.filter((t) => t.status === s);
         const isCollapsed = collapsed.has(s);
@@ -976,6 +974,59 @@ function FilterView({ label, options, value, onChange, items, members, assemblie
           {!sorted.length && <div style={S.empty}>אין משימות</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+// מכלול tab: every assembly is a collapsible block (toggle open/close) listing
+// its tasks. Open state persisted as a UI preference.
+function AssemblyGroups({ tasks, assemblies, members, onPick }) {
+  const [open, setOpen] = useState(() => new Set(loadJSON("mc:ui:asmOpen", [])));
+  const toggle = (name) => setOpen((prev) => {
+    const n = new Set(prev);
+    n.has(name) ? n.delete(name) : n.add(name);
+    saveJSON("mc:ui:asmOpen", [...n]);
+    return n;
+  });
+  const groups = Object.keys(assemblies).map((name) => ({ name, color: assemblies[name], items: tasks.filter((t) => t.asm === name) }));
+  const orphan = tasks.filter((t) => !t.asm || !assemblies[t.asm]);
+  if (orphan.length) groups.push({ name: "— ללא מכלול —", color: "#5A6573", items: orphan });
+
+  return (
+    <div style={{ maxWidth: 820 }}>
+      {groups.map((g) => {
+        const isOpen = open.has(g.name);
+        const doneN = g.items.filter((t) => t.status === "בוצע").length;
+        return (
+          <div key={g.name} style={S.asmGroup}>
+            <div style={S.asmGroupHead} onClick={() => toggle(g.name)}>
+              <span style={S.colToggle}>{isOpen ? "▾" : "▸"}</span>
+              <span style={{ ...S.qAsm, background: g.color, color: readable(g.color), flexShrink: 0 }}>{g.name}</span>
+              <span style={S.memberCount}>{g.items.length} משימות · {doneN} בוצעו</span>
+            </div>
+            {isOpen && (
+              <div style={S.asmGroupBody}>
+                {g.items.map((t) => {
+                  const overdue = isOverdue(t.due) && t.status !== "בוצע";
+                  return (
+                    <div key={t.id} style={{ ...S.qrow, marginBottom: 6, cursor: "pointer" }} className="card" onClick={() => onPick(t)}>
+                      <span style={{ ...S.qdot, background: STATUSES[t.status].color }} title={t.status} />
+                      <span style={S.qTask}>{t.task}</span>
+                      {(t.checklist?.length || 0) > 0 && <span style={S.clip}>✓ {t.checklist.filter((c) => c.done).length}/{t.checklist.length}</span>}
+                      {(t.attachments?.length || 0) > 0 && <span style={S.clip}>📎 {t.attachments.length}</span>}
+                      <span style={{ ...S.ava, width: 20, height: 20, background: memberColor(members, t.who) }}>{initials(t.who)}</span>
+                      {t.due && <span style={{ ...S.qDue, ...(overdue ? S.overdue : {}) }}>{t.due}</span>}
+                      <span style={{ ...S.pri, position: "static", color: PRIORITIES[t.pri], borderColor: PRIORITIES[t.pri] + "55" }}>{t.pri}</span>
+                    </div>
+                  );
+                })}
+                {!g.items.length && <div style={S.empty}>אין משימות</div>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {!groups.length && <div style={S.empty}>אין מכלולים. הוסף מכלול דרך הכפתור בכותרת.</div>}
     </div>
   );
 }
