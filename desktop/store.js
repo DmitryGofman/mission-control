@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY, name TEXT, color TEXT, isController INTEGER);
 CREATE TABLE IF NOT EXISTS procurement (
-  id INTEGER PRIMARY KEY, item TEXT, supplier TEXT, status TEXT,
+  id INTEGER PRIMARY KEY, item TEXT, supplier TEXT, asm TEXT, status TEXT,
   orderDate TEXT, eta TEXT, cost TEXT, notes TEXT, attachments TEXT
 );
 CREATE TABLE IF NOT EXISTS audit_log (seq INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, action TEXT, detail TEXT);
@@ -68,6 +68,7 @@ function ensureProcCols() {
   const info = db.exec("PRAGMA table_info(procurement)");
   const cols = info.length ? info[0].values.map((r) => r[1]) : [];
   if (!cols.includes("attachments")) db.run("ALTER TABLE procurement ADD COLUMN attachments TEXT");
+  if (!cols.includes("asm")) db.run("ALTER TABLE procurement ADD COLUMN asm TEXT");
 }
 
 // One-time migration: any attachment still held as a BLOB in the DB is written
@@ -176,8 +177,8 @@ function setItem(key, json) {
     for (const m of arr) st.run([m.id, m.name, m.color, m.isController ? 1 : 0]);
     st.free();
   } else if (table === "procurement") {
-    const st = db.prepare("INSERT INTO procurement(id,item,supplier,status,orderDate,eta,cost,notes,attachments) VALUES (?,?,?,?,?,?,?,?,?)");
-    for (const p of arr) st.run([p.id, p.item, p.supplier, p.status, p.orderDate, p.eta, p.cost, p.notes, JSON.stringify(p.attachments || [])]);
+    const st = db.prepare("INSERT INTO procurement(id,item,supplier,asm,status,orderDate,eta,cost,notes,attachments) VALUES (?,?,?,?,?,?,?,?,?,?)");
+    for (const p of arr) st.run([p.id, p.item, p.supplier, p.asm || "", p.status, p.orderDate, p.eta, p.cost, p.notes, JSON.stringify(p.attachments || [])]);
     st.free();
   } else if (table === "audit_log") {
     const st = db.prepare("INSERT INTO audit_log(ts,action,detail) VALUES (?,?,?)");

@@ -170,8 +170,8 @@ export const S = {
   commentInput: { flex: 1, background: PANEL, border: `1px solid ${LINE}`, borderRadius: 9, padding: "9px 11px", color: INK, font: "inherit", fontSize: 13, outline: "none" },
   // procurement
   procTable: { display: "flex", flexDirection: "column", gap: 8 },
-  procRow: { display: "grid", gridTemplateColumns: "1.6fr 1fr auto 1fr 1fr .8fr", gap: 10, alignItems: "center", background: PANEL, border: `1px solid ${LINE}`, borderRadius: 10, padding: "11px 13px", cursor: "pointer", transition: ".14s" },
-  procHeadRow: { display: "grid", gridTemplateColumns: "1.6fr 1fr auto 1fr 1fr .8fr", gap: 10, padding: "0 13px 6px", fontSize: 10.5, color: MUTED, fontWeight: 700 },
+  procRow: { display: "grid", gridTemplateColumns: "1.6fr .9fr 1fr auto 1fr 1fr .8fr", gap: 10, alignItems: "center", background: PANEL, border: `1px solid ${LINE}`, borderRadius: 10, padding: "11px 13px", cursor: "pointer", transition: ".14s" },
+  procHeadRow: { display: "grid", gridTemplateColumns: "1.6fr .9fr 1fr auto 1fr 1fr .8fr", gap: 10, padding: "0 13px 6px", fontSize: 10.5, color: MUTED, fontWeight: 700 },
   procItem: { fontSize: 13.5, fontWeight: 600 },
   procCell: { fontSize: 12, color: "#C9D4E0" },
   procDate: { fontSize: 11.5, color: MUTED, fontFamily: "'JetBrains Mono',monospace" },
