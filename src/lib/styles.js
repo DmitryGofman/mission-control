@@ -13,7 +13,7 @@ export const S = {
   h1: { fontSize: 15, fontWeight: 800, margin: 0, letterSpacing: "-.3px", lineHeight: 1.1, whiteSpace: "nowrap" },
   titleLine: { display: "flex", alignItems: "center", gap: 7, minWidth: 0 },
   titleSep: { color: MUTED, fontSize: 14 },
-  projectInput: { background: "transparent", border: "1px solid transparent", borderRadius: 6, color: GOLD, font: "inherit", fontSize: 14, fontWeight: 700, outline: "none", padding: "1px 4px", minWidth: 60, maxWidth: 220, width: "auto" },
+  projectInput: { background: "transparent", border: "1px solid transparent", borderRadius: 6, color: GOLD, font: "inherit", fontSize: 14, fontWeight: 700, outline: "none", padding: "1px 4px", minWidth: 60, maxWidth: 460, width: "auto" },
   sub: { fontSize: 10.5, color: MUTED, marginTop: 1 },
   headRight: { marginInlineStart: "auto", display: "flex", gap: 6, alignItems: "center", flexShrink: 0 },
   ghostBtn: { font: "inherit", fontSize: 12, fontWeight: 600, color: INK, background: PANEL2, border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" },
@@ -59,6 +59,10 @@ export const S = {
   overdue: { color: "#F85149", fontWeight: 700 },
   clip: { display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10.5, color: MUTED },
   empty: { color: "#5A6373", fontSize: 12, textAlign: "center", padding: "16px 0" },
+  // collapsible per-מכלול blocks (asm tab)
+  asmGroup: { border: `1px solid ${LINE}`, borderRadius: 11, marginBottom: 9, overflow: "hidden", background: PANEL2 },
+  asmGroupHead: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", cursor: "pointer", userSelect: "none" },
+  asmGroupBody: { padding: "2px 10px 10px" },
   // agenda (date-grouped) view
   agenda: { maxWidth: 760 },
   agendaGroup: { marginBottom: 18 },

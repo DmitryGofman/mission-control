@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { S } from "../lib/styles.js";
+import { S, MUTED } from "../lib/styles.js";
 import { STATUSES, PRIORITIES, STATUS_ORDER, readable, initials, tagColor, asmColor, dueToISO, isoToDue } from "../lib/constants.js";
 import { useEscape } from "../lib/useEscape.js";
 import Attachments from "./Attachments.jsx";
@@ -19,17 +19,24 @@ function Select({ value, options, onChange, color }) {
 
 const blankTask = () => ({
   asm: "", task: "", pri: "בינוני",
-  status: "בעבודה", who: "", ctrl: "", due: "", notes: "",
+  status: "טרם התחיל", who: "", ctrl: "", due: "", notes: "",
   attachments: [], comments: [], checklist: [], tags: [],
 });
 
 const uid = () => "c_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+// Format a stored ISO timestamp as European date+time (DD.MM.YYYY HH:MM).
+function fmtTs(iso) {
+  if (!iso) return "";
+  try { return new Date(iso).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
+  catch { return ""; }
+}
 
-function Checklist({ items, onChange }) {
+function Checklist({ items, onChange, members = [] }) {
   const [text, setText] = useState("");
   const done = items.filter((i) => i.done).length;
   const pct = items.length ? Math.round((done / items.length) * 100) : 0;
   const toggle = (id) => onChange(items.map((i) => (i.id === id ? { ...i, done: !i.done } : i)));
+  const setWho = (id, who) => onChange(items.map((i) => (i.id === id ? { ...i, who } : i)));
 
   function add() {
     const t = text.trim();
@@ -46,6 +53,11 @@ function Checklist({ items, onChange }) {
         <div key={i.id} style={S.checkItem}>
           <span style={{ ...S.checkBox, ...(i.done ? S.checkBoxOn : {}) }} onClick={() => toggle(i.id)}>{i.done ? "✓" : ""}</span>
           <span style={{ ...S.checkText, ...(i.done ? S.checkTextDone : {}) }}>{i.text}</span>
+          <select value={i.who || ""} onChange={(e) => setWho(i.id, e.target.value)} title="אחראי לתת-המשימה"
+            style={{ font: "inherit", fontSize: 11, color: i.who ? "#E6EDF3" : "#8B97A8", background: "var(--panel2)", border: "1px solid var(--line)", borderRadius: 6, padding: "2px 4px", maxWidth: 90, cursor: "pointer", flexShrink: 0 }}>
+            <option value="">אחראי…</option>
+            {members.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
+          </select>
           <button type="button" style={S.commentX} onClick={() => onChange(items.filter((x) => x.id !== i.id))} aria-label="מחק">×</button>
         </div>
       ))}
@@ -217,7 +229,7 @@ export default function TaskModal({ task, members, assemblies = {}, tagSuggestio
             </select>
           </Field>
           <Field label="תג״ב" title="תאריך גמר בנייה — תאריך היעד למשימה">
-            <input type="date" style={S.dateInput} title="תאריך גמר בנייה (תאריך יעד)" value={dueToISO(draft.due)}
+            <input type="date" lang="en-GB" style={S.dateInput} title="תאריך גמר בנייה (תאריך יעד)" value={dueToISO(draft.due)}
               onChange={(e) => set("due", isoToDue(e.target.value))} />
           </Field>
         </div>
@@ -230,11 +242,18 @@ export default function TaskModal({ task, members, assemblies = {}, tagSuggestio
 
         <Tags tags={draft.tags || []} suggestions={tagSuggestions} onChange={(t) => set("tags", t)} />
 
-        <Checklist items={draft.checklist || []} onChange={(c) => set("checklist", c)} />
+        <Checklist items={draft.checklist || []} onChange={(c) => set("checklist", c)} members={members} />
 
         <Attachments value={draft.attachments || []} onChange={(a) => set("attachments", a)} />
 
         <CommentThread comments={draft.comments || []} members={members} onChange={(c) => set("comments", c)} />
+
+        {isEdit && (task?.createdAt || task?.updatedAt) && (
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 12, display: "flex", gap: 16, flexWrap: "wrap" }}>
+            {task.createdAt && <span>🕓 נוצרה: {fmtTs(task.createdAt)}</span>}
+            {task.updatedAt && <span>✏️ עודכנה: {fmtTs(task.updatedAt)}</span>}
+          </div>
+        )}
 
         <div style={S.modalActions}>
           <button style={S.primaryBtn} onClick={save}>{isEdit ? "שמור שינויים" : "הוסף משימה"}</button>

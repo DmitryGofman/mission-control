@@ -4,6 +4,10 @@ const path = require("path");
 const store = require("./store");
 const { exportXlsx, importXlsx, templateXlsx } = require("./excel");
 
+// Use a European date locale so the native date picker shows DD/MM/YYYY, not
+// the US MM/DD/YYYY. Must be set before the app is ready.
+app.commandLine.appendSwitch("lang", "en-GB");
+
 // Load the UI in a dedicated session partition. Older builds accidentally
 // registered a service worker under the default file:// session that hijacked
 // page loads (black screen). A fresh partition can never inherit that SW, and
@@ -11,7 +15,9 @@ const { exportXlsx, importXlsx, templateXlsx } = require("./excel");
 const PARTITION = "persist:mc";
 
 const KEYS = { tasks: "mc:tasks:v2", members: "mc:members:v2", proc: "mc:procurement:v2", log: "mc:auditlog:v2", asm: "mc:assemblies:v1", project: "mc:project:v1" };
-const ASM_PALETTE = ["#E8B84B", "#58A6FF", "#3FB950", "#F778BA", "#BC8CFF", "#F0883E", "#56D4DD", "#DB6D28", "#A5D6A7", "#FF7B72"];
+const ASM_PALETTE = ["#E8B84B", "#58A6FF", "#3FB950", "#F778BA", "#BC8CFF", "#F0883E", "#56D4DD", "#DB6D28", "#A5D6A7", "#FF7B72", "#7AA2F7", "#9ECE6A", "#E0AF68", "#F7768E", "#2AC3DE", "#C792EA"];
+// First palette color not already used (so a new value never reuses an existing one).
+function unusedColor(usedColors) { const used = new Set(usedColors); for (const c of ASM_PALETTE) if (!used.has(c)) return c; return ASM_PALETTE[usedColors.length % ASM_PALETTE.length]; }
 
 let linkedXlsx = null;
 let xlsxTimer = null;
@@ -123,13 +129,13 @@ function applyExcelSync(data) {
 
   // --- merge new מכלול + people, like a normal import ---
   const asmObj = readObj(KEYS.asm);
-  for (const t of tasks) { const a = (t.asm || "").trim(); if (a && !asmObj[a]) asmObj[a] = ASM_PALETTE[Object.keys(asmObj).length % ASM_PALETTE.length]; }
+  for (const t of tasks) { const a = (t.asm || "").trim(); if (a && !asmObj[a]) asmObj[a] = unusedColor(Object.values(asmObj)); }
   store.setItem(KEYS.asm, JSON.stringify(asmObj));
   const membersArr = readArr(KEYS.members);
   const haveNames = new Set(membersArr.map((m) => m.name));
   for (const t of tasks) for (const name of [t.who, t.ctrl]) {
     const n = (name || "").trim();
-    if (n && !haveNames.has(n)) { haveNames.add(n); membersArr.push({ id: "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: n, color: ASM_PALETTE[membersArr.length % ASM_PALETTE.length], isController: false }); }
+    if (n && !haveNames.has(n)) { haveNames.add(n); membersArr.push({ id: "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: n, color: unusedColor(membersArr.map((m) => m.color)), isController: false }); }
   }
   store.setItem(KEYS.members, JSON.stringify(membersArr));
 
@@ -197,7 +203,7 @@ function applyImport(data, replace) {
   const asmObj = readObj(KEYS.asm);
   for (const t of newTasks) {
     const a = (t.asm || "").trim();
-    if (a && !asmObj[a]) asmObj[a] = ASM_PALETTE[Object.keys(asmObj).length % ASM_PALETTE.length];
+    if (a && !asmObj[a]) asmObj[a] = unusedColor(Object.values(asmObj));
   }
   store.setItem(KEYS.asm, JSON.stringify(asmObj));
 
@@ -209,7 +215,7 @@ function applyImport(data, replace) {
       const n = (name || "").trim();
       if (n && !haveNames.has(n)) {
         haveNames.add(n);
-        membersArr.push({ id: "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: n, color: ASM_PALETTE[membersArr.length % ASM_PALETTE.length], isController: false });
+        membersArr.push({ id: "m_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: n, color: unusedColor(membersArr.map((m) => m.color)), isController: false });
       }
     }
   }

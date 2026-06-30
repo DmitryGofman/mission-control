@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { S, MUTED } from "../lib/styles.js";
-import { MEMBER_PALETTE, readable } from "../lib/constants.js";
+import { MEMBER_PALETTE, readable, unusedColor } from "../lib/constants.js";
 import { useEscape } from "../lib/useEscape.js";
 
 // Manage the מכלול list: add, rename, recolor, remove. `assemblies` is a
@@ -18,7 +18,7 @@ export default function AssembliesModal({ assemblies, tasks, onChange, onClose }
     const name = newName.trim();
     if (!name) return;
     if (assemblies[name]) { alert("מכלול בשם הזה כבר קיים."); return; }
-    const color = MEMBER_PALETTE[names.length % MEMBER_PALETTE.length];
+    const color = unusedColor(Object.values(assemblies));
     onChange({ ...assemblies, [name]: color }, { type: "add", name });
     setNewName("");
   }

@@ -2,13 +2,14 @@
 // Mirrors the data model in SPEC.md §3–§4.
 
 export const STATUSES = {
+  "טרם התחיל": { color: "#7D8590", glow: "rgba(125,133,144,.30)" },
   "בוצע": { color: "#3FB950", glow: "rgba(63,185,80,.35)" },
   "בעבודה": { color: "#E8C547", glow: "rgba(232,197,71,.30)" },
   "תקוע": { color: "#F85149", glow: "rgba(248,81,73,.35)" },
   "לבדיקה": { color: "#F778BA", glow: "rgba(247,120,186,.30)" },
 };
-// Board column order (SPEC §5).
-export const STATUS_ORDER = ["בעבודה", "תקוע", "לבדיקה", "בוצע"];
+// Board column order (SPEC §5): not-started → in-progress → stuck → review → done.
+export const STATUS_ORDER = ["טרם התחיל", "בעבודה", "תקוע", "לבדיקה", "בוצע"];
 
 // Default מכלול list. This is now an editable, persisted list (see STORE.assemblies);
 // this object is just the seed/default.
@@ -37,11 +38,20 @@ export const PROC_SEED = [
   { id: 3, item: "מחברים אלקטרוניים", supplier: "RS", status: "להזמין", orderDate: "", eta: "", cost: "", notes: "ממתין לאישור BOM." },
 ];
 
-// Member colors cycle through this palette when a new member is added.
+// Member / assembly colors cycle through this palette.
 export const MEMBER_PALETTE = [
   "#E8B84B", "#58A6FF", "#3FB950", "#F778BA", "#BC8CFF",
   "#F0883E", "#56D4DD", "#DB6D28", "#A5D6A7", "#FF7B72",
+  "#7AA2F7", "#9ECE6A", "#E0AF68", "#F7768E", "#2AC3DE", "#C792EA",
 ];
+
+// Pick a color not already used, so a new assembly/member never reuses an
+// existing one while free colors remain. Falls back to cycling if all are taken.
+export function unusedColor(usedColors, palette = MEMBER_PALETTE) {
+  const used = new Set(usedColors);
+  for (const c of palette) if (!used.has(c)) return c;
+  return palette[usedColors.length % palette.length];
+}
 
 // Default project members (seed). Editable in-app via the Members screen.
 // `isController` marks members who can be assigned as a task controller (בקר).

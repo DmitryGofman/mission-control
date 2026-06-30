@@ -8,7 +8,7 @@ async function ExcelJS() {
   return _xlsx;
 }
 
-const STATUSES = ["בעבודה", "תקוע", "לבדיקה", "בוצע"];
+const STATUSES = ["טרם התחיל", "בעבודה", "תקוע", "לבדיקה", "בוצע"];
 const PRIORITIES = ["גבוה", "בינוני", "נמוך"];
 const PROC_STATUSES = ["להזמין", "הוזמן", "בדרך", "הגיע"];
 const pick = (val, set, fb) => { const v = (val || "").trim(); return set.includes(v) ? v : fb; };
