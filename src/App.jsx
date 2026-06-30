@@ -667,7 +667,9 @@ export default function App() {
               onPick={setEditing} onComplete={agendaComplete} onPostpone={onPostpone} onMove={moveTaskStatus} />
           )}
           {view === "asm" && (
-            <AssemblyGroups tasks={filtered} assemblies={assemblies} members={members} onPick={setEditing} />
+            <FilterView label="מכלול" options={Object.keys(assemblies)} value={filterAsm} onChange={setFilterAsm}
+              items={filtered.filter((t) => t.asm === filterAsm)} members={members} assemblies={assemblies} colorMap={assemblies}
+              onPick={setEditing} onComplete={agendaComplete} onPostpone={onPostpone} onMove={moveTaskStatus} />
           )}
           {view === "agenda" && (
             <AgendaView tasks={filtered} members={members} assemblies={assemblies} onPick={setEditing}
@@ -893,17 +895,30 @@ function BoardColumns({ items, members, assemblies, onPick, onMove }) {
   // cards hidden) so a heavy column like "בוצע" doesn't overload the board.
   // Persisted (UI preference) so it sticks across reloads.
   const [collapsed, setCollapsed] = useState(() => new Set(loadJSON("mc:ui:collapsedCols", [])));
+  // Per-(status, מכלול) collapse state for the in-column grouping (default open).
+  // We persist the CLOSED keys so a brand-new group shows expanded by default.
+  const [asmClosed, setAsmClosed] = useState(() => new Set(loadJSON("mc:ui:boardAsmClosed", [])));
   const toggle = (s) => setCollapsed((prev) => {
     const next = new Set(prev);
     next.has(s) ? next.delete(s) : next.add(s);
     saveJSON("mc:ui:collapsedCols", [...next]);
     return next;
   });
+  const toggleAsm = (key) => setAsmClosed((prev) => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    saveJSON("mc:ui:boardAsmClosed", [...next]);
+    return next;
+  });
+  const card = (t) => <Card key={t.id} t={t} members={members} assemblies={assemblies} onClick={() => onPick(t)} draggable />;
   return (
     <div style={{ ...S.board, gridTemplateColumns: `repeat(${STATUS_ORDER.length}, minmax(0,1fr))` }} className="mc-board">
       {STATUS_ORDER.map((s) => {
         const colItems = items.filter((t) => t.status === s);
         const isCollapsed = collapsed.has(s);
+        // Once a column holds more than 2 tasks, group its cards by מכלול into
+        // collapsible blocks; an open block gets a thin border in the assembly color.
+        const grouped = colItems.length > 2 ? groupByAsm(colItems, assemblies) : null;
         return (
           <div key={s} style={{ ...S.col, ...(isCollapsed ? S.colCollapsed : {}), ...(over === s ? S.colOver : {}) }}
             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (over !== s) setOver(s); }}
@@ -915,13 +930,39 @@ function BoardColumns({ items, members, assemblies, onPick, onMove }) {
               <button style={S.colToggle} onClick={() => toggle(s)}
                 title={isCollapsed ? "הרחב עמודה" : "כווץ לעמודה לבאנר"}>{isCollapsed ? "▸" : "▾"}</button>
             </div>
-            {!isCollapsed && colItems.map((t) => <Card key={t.id} t={t} members={members} assemblies={assemblies} onClick={() => onPick(t)} draggable />)}
+            {!isCollapsed && grouped && grouped.map((g) => {
+              const key = `${s}::${g.name}`;
+              const open = !asmClosed.has(key);
+              return (
+                <div key={g.name} style={{ ...S.boardGroup, ...(open ? { ...S.boardGroupOpen, borderColor: g.color } : {}) }}>
+                  <div style={S.boardGroupHead} onClick={() => toggleAsm(key)}>
+                    <span style={S.colToggle}>{open ? "▾" : "▸"}</span>
+                    <span style={{ ...S.qAsm, background: g.color, color: readable(g.color) }}>{g.name}</span>
+                    <span style={S.cnt}>{g.items.length}</span>
+                  </div>
+                  {open && g.items.map(card)}
+                </div>
+              );
+            })}
+            {!isCollapsed && !grouped && colItems.map(card)}
             {!isCollapsed && !colItems.length && <div style={S.empty}>—</div>}
           </div>
         );
       })}
     </div>
   );
+}
+
+// Group a column's tasks by מכלול (preserving first-seen order); unknown/empty
+// assemblies fall under a gray "ללא מכלול" bucket. Returns [{name,color,items}].
+function groupByAsm(list, assemblies) {
+  const order = [], map = new Map();
+  for (const t of list) {
+    const name = t.asm && assemblies[t.asm] ? t.asm : "ללא מכלול";
+    if (!map.has(name)) { map.set(name, []); order.push(name); }
+    map.get(name).push(t);
+  }
+  return order.map((name) => ({ name, color: name === "ללא מכלול" ? "#5A6573" : assemblies[name], items: map.get(name) }));
 }
 
 function FilterView({ label, options, value, onChange, items, members, assemblies, onPick, colorMap, onComplete, onPostpone, onMove }) {
@@ -975,59 +1016,6 @@ function FilterView({ label, options, value, onChange, items, members, assemblie
           {!sorted.length && <div style={S.empty}>אין משימות</div>}
         </div>
       )}
-    </div>
-  );
-}
-
-// מכלול tab: every assembly is a collapsible block (toggle open/close) listing
-// its tasks. Open state persisted as a UI preference.
-function AssemblyGroups({ tasks, assemblies, members, onPick }) {
-  const [open, setOpen] = useState(() => new Set(loadJSON("mc:ui:asmOpen", [])));
-  const toggle = (name) => setOpen((prev) => {
-    const n = new Set(prev);
-    n.has(name) ? n.delete(name) : n.add(name);
-    saveJSON("mc:ui:asmOpen", [...n]);
-    return n;
-  });
-  const groups = Object.keys(assemblies).map((name) => ({ name, color: assemblies[name], items: tasks.filter((t) => t.asm === name) }));
-  const orphan = tasks.filter((t) => !t.asm || !assemblies[t.asm]);
-  if (orphan.length) groups.push({ name: "— ללא מכלול —", color: "#5A6573", items: orphan });
-
-  return (
-    <div style={{ maxWidth: 820 }}>
-      {groups.map((g) => {
-        const isOpen = open.has(g.name);
-        const doneN = g.items.filter((t) => t.status === "בוצע").length;
-        return (
-          <div key={g.name} style={S.asmGroup}>
-            <div style={S.asmGroupHead} onClick={() => toggle(g.name)}>
-              <span style={S.colToggle}>{isOpen ? "▾" : "▸"}</span>
-              <span style={{ ...S.qAsm, background: g.color, color: readable(g.color), flexShrink: 0 }}>{g.name}</span>
-              <span style={S.memberCount}>{g.items.length} משימות · {doneN} בוצעו</span>
-            </div>
-            {isOpen && (
-              <div style={S.asmGroupBody}>
-                {g.items.map((t) => {
-                  const overdue = isOverdue(t.due) && t.status !== "בוצע";
-                  return (
-                    <div key={t.id} style={{ ...S.qrow, marginBottom: 6, cursor: "pointer" }} className="card" onClick={() => onPick(t)}>
-                      <span style={{ ...S.qdot, background: STATUSES[t.status].color }} title={t.status} />
-                      <span style={S.qTask}>{t.task}</span>
-                      {(t.checklist?.length || 0) > 0 && <span style={S.clip}>✓ {t.checklist.filter((c) => c.done).length}/{t.checklist.length}</span>}
-                      {(t.attachments?.length || 0) > 0 && <span style={S.clip}>📎 {t.attachments.length}</span>}
-                      <span style={{ ...S.ava, width: 20, height: 20, background: memberColor(members, t.who) }}>{initials(t.who)}</span>
-                      {t.due && <span style={{ ...S.qDue, ...(overdue ? S.overdue : {}) }}>{t.due}</span>}
-                      <span style={{ ...S.pri, position: "static", color: PRIORITIES[t.pri], borderColor: PRIORITIES[t.pri] + "55" }}>{t.pri}</span>
-                    </div>
-                  );
-                })}
-                {!g.items.length && <div style={S.empty}>אין משימות</div>}
-              </div>
-            )}
-          </div>
-        );
-      })}
-      {!groups.length && <div style={S.empty}>אין מכלולים. הוסף מכלול דרך הכפתור בכותרת.</div>}
     </div>
   );
 }

@@ -63,6 +63,10 @@ export const S = {
   asmGroup: { border: `1px solid ${LINE}`, borderRadius: 11, marginBottom: 9, overflow: "hidden", background: PANEL2 },
   asmGroupHead: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", cursor: "pointer", userSelect: "none" },
   asmGroupBody: { padding: "2px 10px 10px" },
+  // collapsible per-מכלול groups inside a board status column (when >2 cards)
+  boardGroup: { borderRadius: 10, marginBottom: 9, border: "1px solid transparent", transition: "border-color .12s" },
+  boardGroupOpen: { padding: 6 }, // thin colored border applied inline (assembly color)
+  boardGroupHead: { display: "flex", alignItems: "center", gap: 7, padding: "3px 4px 6px", cursor: "pointer", userSelect: "none" },
   // agenda (date-grouped) view
   agenda: { maxWidth: 760 },
   agendaGroup: { marginBottom: 18 },
