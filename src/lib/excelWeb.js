@@ -46,7 +46,8 @@ function buildWorkbook(ExcelJSlib, { tasks = [], procurement = [], projectName =
 
   const ps = wb.addWorksheet("בקרת רכש", { views: [{ rightToLeft: true, state: "frozen", ySplit: 1 }] });
   ps.columns = [
-    { header: "פריט", key: "item", width: 30 }, { header: "ספק", key: "supplier", width: 18 },
+    { header: "פריט", key: "item", width: 30 }, { header: "מכלול", key: "asm", width: 14 },
+    { header: "אחראי רכש", key: "supplier", width: 14 },
     { header: "סטטוס", key: "status", width: 12 }, { header: "תאריך הזמנה", key: "orderDate", width: 14 },
     { header: "צפי הגעה", key: "eta", width: 14 }, { header: "עלות", key: "cost", width: 12 },
     { header: "הערות", key: "notes", width: 36 },
@@ -135,7 +136,7 @@ export async function importXlsx(file) {
       if (i === 1) return;
       const item = g(row, ["פריט"]);
       if (!item) return;
-      procurement.push({ item, supplier: g(row, ["ספק"]), status: pick(g(row, ["סטטוס"]), PROC_STATUSES, "להזמין"),
+      procurement.push({ item, asm: g(row, ["מכלול"]), supplier: g(row, ["אחראי", "ספק"]), status: pick(g(row, ["סטטוס"]), PROC_STATUSES, "להזמין"),
         orderDate: g(row, ["הזמנה"]), eta: g(row, ["הגעה", "צפי"]), cost: g(row, ["עלות"]), notes: g(row, ["הער"]) });
     });
   }

@@ -91,7 +91,7 @@ async function onExternalExcelChange() {
 }
 
 const TASK_FLAT = ["asm", "task", "pri", "status", "who", "ctrl", "due", "notes"];
-const PROC_FLAT = ["item", "supplier", "status", "orderDate", "eta", "cost", "notes"];
+const PROC_FLAT = ["item", "asm", "supplier", "status", "orderDate", "eta", "cost", "notes"];
 function applyExcelSync(data) {
   // --- tasks: match by id, update flat fields, keep app-only fields ---
   const tasks = readArr(KEYS.tasks);
@@ -120,7 +120,7 @@ function applyExcelSync(data) {
       const p = pById.get(row.id);
       for (const k of PROC_FLAT) p[k] = row[k] != null ? row[k] : p[k];
     } else {
-      const np = { id: ++maxPid, item: row.item, supplier: row.supplier, status: row.status,
+      const np = { id: ++maxPid, item: row.item, asm: row.asm || "", supplier: row.supplier, status: row.status,
         orderDate: row.orderDate, eta: row.eta, cost: row.cost, notes: row.notes, attachments: [] };
       proc.push(np); pById.set(np.id, np);
     }

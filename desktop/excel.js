@@ -76,19 +76,22 @@ async function exportXlsx(filePath, { tasks = [], procurement = [], projectName 
   ps.columns = [
     { header: "מזהה", key: "id", width: 8 },
     { header: "פריט", key: "item", width: 30 },
-    { header: "ספק", key: "supplier", width: 18 },
+    { header: "מכלול", key: "asm", width: 14 },
+    { header: "אחראי רכש", key: "supplier", width: 14 },
     { header: "סטטוס", key: "status", width: 12 },
     { header: "תאריך הזמנה", key: "orderDate", width: 14 },
     { header: "צפי הגעה", key: "eta", width: 14 },
     { header: "עלות", key: "cost", width: 12 },
     { header: "הערות", key: "notes", width: 36 },
   ];
-  for (const p of procurement) ps.addRow({ id: p.id, item: p.item, supplier: p.supplier, status: p.status, orderDate: p.orderDate, eta: p.eta, cost: p.cost, notes: p.notes });
+  for (const p of procurement) ps.addRow({ id: p.id, item: p.item, asm: p.asm, supplier: p.supplier, status: p.status, orderDate: p.orderDate, eta: p.eta, cost: p.cost, notes: p.notes });
   styleHeader(ps.getRow(1));
   ps.eachRow((row, i) => {
     if (i === 1) return;
     const st = String(row.getCell("status").text || "").trim();
     if (PROC_STATUS_COLORS[st]) paint(row.getCell("status"), PROC_STATUS_COLORS[st]);
+    const asmName = String(row.getCell("asm").text || "").trim();
+    if (asmName) paint(row.getCell("asm"), assemblies[asmName] || "5A6573");
   });
 
   await wb.xlsx.writeFile(filePath);
@@ -165,7 +168,8 @@ async function importXlsx(filePath) {
       procurement.push({
         id: parseId(g(row, ["מזהה"])),
         item,
-        supplier: g(row, ["ספק"]),
+        asm: g(row, ["מכלול"]),
+        supplier: g(row, ["אחראי", "ספק"]),
         status: pick(g(row, ["סטטוס"]), PROC_STATUSES, "להזמין"),
         orderDate: g(row, ["הזמנה"]),
         eta: g(row, ["הגעה", "צפי"]),

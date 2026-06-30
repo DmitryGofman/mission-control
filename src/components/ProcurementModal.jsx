@@ -8,10 +8,13 @@ function Field({ label, children }) {
   return <div style={S.field}><label style={S.fieldLabel}>{label}</label>{children}</div>;
 }
 
-const blank = () => ({ item: "", supplier: "", status: "להזמין", orderDate: "", eta: "", cost: "", notes: "", attachments: [] });
+const blank = () => ({ item: "", supplier: "", asm: "", status: "להזמין", orderDate: "", eta: "", cost: "", notes: "", attachments: [] });
 
-// Add/edit a procurement (בקרת רכש) item. Mirrors the original Excel sheet.
-export default function ProcurementModal({ row, onSave, onDelete, onClose }) {
+// Add/edit a procurement (בקרת רכש) item. "supplier" now holds the אחראי רכש
+// (procurement owner); "asm" is the מכלול the item belongs to.
+export default function ProcurementModal({ row, onSave, onDelete, onClose, members = [], assemblies = {} }) {
+  const memberNames = members.map((m) => m.name);
+  const asmNames = Object.keys(assemblies);
   const isEdit = !!row;
   const [draft, setDraft] = useState(() => (row ? { ...row } : blank()));
   const [confirmDel, setConfirmDel] = useState(false);
@@ -35,8 +38,21 @@ export default function ProcurementModal({ row, onSave, onDelete, onClose }) {
           placeholder="שם הפריט…" onChange={(e) => set("item", e.target.value)} />
 
         <div style={S.fields} className="mc-fields">
-          <Field label="ספק">
-            <input style={S.modalInput} value={draft.supplier} placeholder="—" onChange={(e) => set("supplier", e.target.value)} />
+          <Field label="אחראי רכש">
+            <select style={{ ...S.modalInput, cursor: "pointer", color: draft.supplier ? "#E6EDF3" : "#8B97A8" }}
+              value={draft.supplier || ""} onChange={(e) => set("supplier", e.target.value)}>
+              <option value="">—</option>
+              {memberNames.map((n) => <option key={n} value={n}>{n}</option>)}
+              {draft.supplier && !memberNames.includes(draft.supplier) && <option value={draft.supplier}>{draft.supplier}</option>}
+            </select>
+          </Field>
+          <Field label="מכלול">
+            <select style={{ ...S.modalInput, cursor: "pointer", color: draft.asm ? "#E6EDF3" : "#8B97A8" }}
+              value={draft.asm || ""} onChange={(e) => set("asm", e.target.value)}>
+              <option value="">—</option>
+              {asmNames.map((n) => <option key={n} value={n}>{n}</option>)}
+              {draft.asm && !asmNames.includes(draft.asm) && <option value={draft.asm}>{draft.asm}</option>}
+            </select>
           </Field>
           <Field label="סטטוס">
             <select value={draft.status} onChange={(e) => set("status", e.target.value)}

@@ -90,7 +90,7 @@ export default function App() {
     const asm = loadJSON(STORE.assemblies, ASSEMBLIES);
     setTasks(t.map((x) => ({ attachments: [], comments: [], checklist: [], tags: [], ...x })));
     setMembers(m.map((x) => ({ isController: false, ...x })));
-    setProc(loadJSON(STORE.procurement, PROC_SEED).map((x) => ({ attachments: [], ...x })));
+    setProc(loadJSON(STORE.procurement, PROC_SEED).map((x) => ({ attachments: [], asm: "", ...x })));
     setLog(loadJSON(STORE.audit, []));
     setAssemblies(asm);
     setProjectName(loadJSON(STORE.project, ""));
@@ -673,7 +673,7 @@ export default function App() {
             <AgendaView tasks={filtered} members={members} assemblies={assemblies} onPick={setEditing}
               onComplete={agendaComplete} onReschedule={agendaReschedule} onPostpone={onPostpone} />
           )}
-          {view === "proc" && <ProcurementView rows={proc} query={query} onPick={setEditingProc} />}
+          {view === "proc" && <ProcurementView rows={proc} query={query} onPick={setEditingProc} assemblies={assemblies} />}
         </main>
       </div>
 
@@ -695,6 +695,7 @@ export default function App() {
       )}
       {editingProc !== undefined && (
         <ProcurementModal row={editingProc} onSave={saveProc} onDelete={deleteProc}
+          members={members} assemblies={assemblies}
           onClose={() => setEditingProc(undefined)} />
       )}
       {showMembers && (
@@ -1031,7 +1032,7 @@ function AssemblyGroups({ tasks, assemblies, members, onPick }) {
   );
 }
 
-function ProcurementView({ rows, query, onPick }) {
+function ProcurementView({ rows, query, onPick, assemblies = {} }) {
   const q = query.trim().toLowerCase();
   const items = q
     ? rows.filter((r) => [r.item, r.supplier, r.notes].some((v) => (v || "").toLowerCase().includes(q)))
@@ -1041,12 +1042,13 @@ function ProcurementView({ rows, query, onPick }) {
   return (
     <div>
       <div style={S.procHeadRow}>
-        <span>פריט</span><span>ספק</span><span>סטטוס</span><span>הוזמן</span><span>צפי הגעה</span><span style={{ textAlign: "end" }}>עלות</span>
+        <span>פריט</span><span>מכלול</span><span>אחראי רכש</span><span>סטטוס</span><span>הוזמן</span><span>צפי הגעה</span><span style={{ textAlign: "end" }}>עלות</span>
       </div>
       <div style={S.procTable}>
         {sorted.map((r) => (
           <div key={r.id} style={S.procRow} className="card" onClick={() => onPick(r)}>
             <span style={S.procItem}>{r.item}{(r.attachments?.length || 0) > 0 && <span style={{ ...S.clip, marginInlineStart: 6 }}>📎 {r.attachments.length}</span>}</span>
+            <span>{r.asm ? <span style={{ ...S.asmPill, background: asmColor(assemblies, r.asm), color: readable(asmColor(assemblies, r.asm)) }}>{r.asm}</span> : <span style={S.procCell}>—</span>}</span>
             <span style={S.procCell}>{r.supplier || "—"}</span>
             <span style={{ ...S.procStatus, background: PROC_STATUSES[r.status], color: readable(PROC_STATUSES[r.status]) }}>{r.status}</span>
             <span style={S.procDate}>{r.orderDate || "—"}</span>
